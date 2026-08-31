@@ -51,6 +51,7 @@ export const MAINNET: Registry = {
             gasNote: 'Gas paid in ETH.',
             attestationEtaMs: 19 * 60_000,
             fastSource: true,
+            accent: '#0052FF',
         },
         {
             family: 'evm',
@@ -65,6 +66,7 @@ export const MAINNET: Registry = {
             gasNote: 'Gas paid in ETH.',
             attestationEtaMs: 19 * 60_000,
             fastSource: true,
+            accent: '#627EEA',
         },
         {
             family: 'solana',
@@ -81,6 +83,7 @@ export const MAINNET: Registry = {
             gasNote: 'Gas paid in SOL.',
             attestationEtaMs: 30_000,
             fastSource: true,
+            accent: '#9945FF',
         },
     ],
 };

@@ -26,6 +26,30 @@
     });
     let longWaitChainLabel = $derived(sourceEntry?.label ?? '');
 
+    // Screen readers hear phase changes without watching the list repaint.
+    let announcement = $derived.by(() => {
+        switch (transfer.phase) {
+            case 'approving':
+                return 'Approving USDC.';
+            case 'burning':
+                return 'Burning on the source chain.';
+            case 'attesting':
+                return "Waiting for Circle's attestation. Funds are safe.";
+            case 'minting':
+                return 'Minting on the destination chain.';
+            case 'done':
+                return 'Transfer complete.';
+            case 'error':
+                return transfer.error?.userMessage ?? 'The transfer hit a problem.';
+            default:
+                return '';
+        }
+    });
+
+    function attestProgress(startedAt: number, etaMs: number): number {
+        return Math.min(0.97, (now - startedAt) / etaMs);
+    }
+
     function fmtElapsed(s: { startedAt?: number; endedAt?: number }): string | null {
         if (!s.startedAt) return null;
         const end = s.endedAt ?? now;
@@ -106,6 +130,7 @@
 </script>
 
 <section class="progress">
+    <p class="sr-only" role="status" aria-live="polite">{announcement}</p>
     <header class="head">
         <h3 class="title">Transfer</h3>
         {#if transfer.amount}
@@ -152,6 +177,21 @@
                             <span class="long-wait-eta"
                                 >{fmtRemaining(step.startedAt, longWaitEtaMs)}</span
                             >
+                            <div
+                                class="bar"
+                                role="progressbar"
+                                aria-label="Attestation progress"
+                                aria-valuemin="0"
+                                aria-valuemax="100"
+                                aria-valuenow={Math.round(
+                                    attestProgress(step.startedAt, longWaitEtaMs) * 100,
+                                )}
+                            >
+                                <div
+                                    class="bar-fill"
+                                    style:width={`${attestProgress(step.startedAt, longWaitEtaMs) * 100}%`}
+                                ></div>
+                            </div>
                         </aside>
                     {/if}
                     {#if step.key === 'attest' && transfer.attestation}
@@ -195,7 +235,7 @@
     </ol>
 
     {#if transfer.error}
-        <div class="error">
+        <div class="error" role="alert">
             <p class="error-message">{transfer.error.userMessage}</p>
             <p class="error-action">{transfer.error.action}</p>
             {#if transfer.error.raw !== undefined}
@@ -246,40 +286,65 @@
         color: var(--text-muted);
     }
 
+    /* Ledger rail: one vertical line ties the entries together. */
     .steps {
         list-style: none;
         margin: 0;
         padding: 0;
         display: flex;
         flex-direction: column;
-        gap: 0.85rem;
+        gap: 0.95rem;
+        position: relative;
+    }
+
+    .steps::before {
+        content: '';
+        position: absolute;
+        left: 0.8rem;
+        top: 0.9rem;
+        bottom: 0.9rem;
+        width: 1px;
+        background: var(--border);
     }
 
     .step {
         display: grid;
-        grid-template-columns: 1.5rem 1fr;
+        grid-template-columns: 1.65rem 1fr;
         gap: 0.75rem;
         align-items: start;
+        position: relative;
     }
 
     .indicator {
-        font-size: 1rem;
-        line-height: 1.5;
-        text-align: center;
+        width: 1.65rem;
+        height: 1.65rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.85rem;
+        line-height: 1;
+        border-radius: 999px;
+        border: 1px solid var(--border-strong);
+        background: var(--bg-elev);
         color: var(--text-dim);
     }
 
     .status-done .indicator {
         color: var(--success);
+        border-color: color-mix(in srgb, var(--success) 45%, transparent);
+        background: var(--success-dim);
     }
 
     .status-active .indicator {
         color: var(--accent);
+        border-color: var(--accent);
         animation: pulse 1.4s ease-in-out infinite;
     }
 
     .status-error .indicator {
         color: var(--error);
+        border-color: color-mix(in srgb, var(--error) 45%, transparent);
+        background: var(--error-dim);
     }
 
     @keyframes pulse {
@@ -422,6 +487,20 @@
         font-size: 0.85rem;
         color: var(--warning);
         font-variant-numeric: tabular-nums;
+    }
+
+    .bar {
+        height: 6px;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--warning) 18%, transparent);
+        overflow: hidden;
+    }
+
+    .bar-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--warning);
+        transition: width 900ms linear;
     }
 
     .cctp-msg {

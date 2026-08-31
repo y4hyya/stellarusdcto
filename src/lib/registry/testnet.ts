@@ -51,6 +51,7 @@ export const TESTNET: Registry = {
             explorer: 'https://testnet.arcscan.app',
             gasNote: 'Gas paid in USDC.',
             fastSource: false,
+            accent: '#3AC7B2',
         },
         {
             family: 'evm',
@@ -65,6 +66,7 @@ export const TESTNET: Registry = {
             gasNote: 'Gas paid in ETH.',
             attestationEtaMs: 15 * 60_000,
             fastSource: true,
+            accent: '#0052FF',
         },
         {
             family: 'evm',
@@ -79,6 +81,7 @@ export const TESTNET: Registry = {
             gasNote: 'Gas paid in ETH.',
             attestationEtaMs: 19 * 60_000,
             fastSource: true,
+            accent: '#627EEA',
         },
         {
             family: 'solana',
@@ -95,6 +98,7 @@ export const TESTNET: Registry = {
             gasNote: 'Gas paid in SOL.',
             attestationEtaMs: 30_000,
             fastSource: true,
+            accent: '#9945FF',
         },
     ],
 };

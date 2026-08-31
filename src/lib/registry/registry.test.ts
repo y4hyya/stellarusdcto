@@ -89,6 +89,14 @@ describe('registry data', () => {
         });
     });
 
+    test('every chain carries a hex accent color for its badge', () => {
+        eachRegistry((r) => {
+            for (const c of r.chains) {
+                expect(c.accent, `${r.env} ${c.id}`).toMatch(/^#[0-9a-fA-F]{6}$/);
+            }
+        });
+    });
+
     test('every environment has at least one stellar RPC and a horizon URL', () => {
         eachRegistry((r) => {
             expect(r.stellar.rpcUrls.length, r.env).toBeGreaterThan(0);

@@ -30,6 +30,8 @@ export type EvmChainEntry = {
     attestationEtaMs?: number;
     /** Whether Circle offers Fast Transfer with this chain as the source. */
     fastSource: boolean;
+    /** Badge color for this chain in the UI. */
+    accent: `#${string}`;
 };
 
 export type SolanaChainEntry = {
@@ -49,6 +51,8 @@ export type SolanaChainEntry = {
     gasNote: string;
     attestationEtaMs?: number;
     fastSource: boolean;
+    /** Badge color for this chain in the UI. */
+    accent: `#${string}`;
 };
 
 export type ChainEntry = EvmChainEntry | SolanaChainEntry;

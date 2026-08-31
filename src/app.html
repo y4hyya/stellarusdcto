@@ -5,9 +5,19 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
             name="description"
-            content="CCTP demo: bridge USDC between Stellar and any CCTP-supported chain via Circle's Cross-Chain Transfer Protocol"
+            content="Free, open source bridge for moving native USDC between Stellar and every CCTP supported chain. No fees, no accounts, no tracking."
         />
-        <title>CCTP Demo · Stellar</title>
+        <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+        <title>stellarusdcto</title>
+        <script>
+            // Apply the stored theme before first paint so there is no flash.
+            try {
+                var t = localStorage.getItem('stellarusdcto.theme');
+                if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+            } catch (e) {
+                /* private mode: system preference applies */
+            }
+        </script>
         %sveltekit.head%
     </head>
     <body data-sveltekit-preload-data="hover">
