@@ -6,7 +6,6 @@
 
 import {
     Account,
-    Address,
     BASE_FEE,
     Contract,
     TransactionBuilder,
@@ -91,7 +90,6 @@ if (dest === registry.stellar.domain) {
     if ('error' in sim && sim.error) throw new Error(`simulation failed: ${sim.error}`);
     const retval = (sim as { result?: { retval: unknown } }).result?.retval;
     console.log(`stellar is_nonce_used: ${scValToNative(retval as never)}`);
-    void Address;
 } else {
     const entry = registry.chains.find((c) => c.domain === dest);
     if (!entry)

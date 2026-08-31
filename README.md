@@ -1,15 +1,16 @@
-# CCTP Demo · Stellar ↔ EVM (Arc · Base)
+# stellarusdcto
 
-A small SvelteKit app that bridges USDC between **Stellar testnet** and a
-CCTP-supported EVM chain (currently **Arc Testnet** by default, or **Base
-Sepolia**) using Circle's
-[Cross-Chain Transfer Protocol V2](https://developers.circle.com/cctp).
+A SvelteKit app that bridges native USDC between **Stellar** and
+CCTP-supported chains (Arc Testnet, Base Sepolia, Ethereum Sepolia, and
+Solana devnet today, with the rest of the CCTP V2 roster on the way) using
+Circle's [Cross-Chain Transfer Protocol V2](https://developers.circle.com/cctp).
 
-The point of the demo is to make every step of CCTP visible: the **burn** on
-the source chain, Circle's **attestation**, and the **mint** on the
-destination chain, all in one screen. Both directions are supported, and
-each direction has multiple flows so you can see (and compare) the UX
-tradeoffs CCTP V2 unlocks.
+Every step stays visible: the **burn** on the source chain, Circle's
+**attestation**, and the **mint** on the destination chain, all in one
+screen. Both directions are supported, transfers survive a refresh, and any
+interrupted CCTP transfer can be completed from just its burn hash.
+
+Built on [Elliot Friend's stellar-cctp-demo](https://github.com/ElliotFriend/stellar-cctp-demo) (MIT).
 
 ```bash
 pnpm install
@@ -36,10 +37,9 @@ You can flip to Base Sepolia at any time via the picker in the EVM panel.
 - **MetaMask** (or any injected EVM wallet). Arc Testnet is added on first connect; for Base Sepolia your wallet probably already has it.
 - Testnet USDC on each side; on Base Sepolia you also need a tiny bit of ETH for gas.
 
-The two wrapper contracts (Soroban + EVM) are already deployed and wired
-into `src/lib/config.ts`, so you don't need to redeploy them to use the
-"1 tx" flows. See `contracts/stellar/cctp-wrapper/` and
-`contracts/evm/cctp-wrapper/` if you want to inspect or redeploy.
+Every flow uses Circle's own CCTP contracts directly, so there is nothing
+to deploy. The `contracts/` directory holds earlier wrapper experiments that
+the app no longer uses.
 
 ## Faucets
 
@@ -96,20 +96,18 @@ Only USDC and the chain ID/domain differ per chain.
 
 ### Stellar → EVM
 
-This direction supports **two flows**, selectable from the Stellar panel:
+Plain CCTP:
 
-1. **2 tx (direct)**, plain CCTP:
-   1. `approve` USDC SAC for the `TokenMessengerMinter`.
-   2. Call `deposit_for_burn` on `TokenMessengerMinter`.
-   3. Poll Iris for the attestation.
-   4. Call `receiveMessage` on the destination's `MessageTransmitterV2`.
+1. `approve` USDC SAC for the `TokenMessengerMinter` (skipped when the
+   allowance already covers the amount).
+2. Call `deposit_for_burn` on `TokenMessengerMinter`.
+3. Poll Iris for the attestation.
+4. Call `receiveMessage` on the destination's `MessageTransmitterV2`.
 
-2. **1 tx (wrapper)**, which uses a user-deployed Soroban wrapper
-   (`contracts/stellar/cctp-wrapper/`) whose `approve_and_deposit` method
-   bundles the `approve` and `deposit_for_burn` into a single Soroban
-   transaction. Soroban's auth tree authorizes both inner calls from one
-   Freighter signature, so the user sees one prompt and pays one network
-   fee. The destination side is identical (`receiveMessage`).
+An optional forwarding toggle tags the burn for Circle's relayer, which
+then mints on the destination with no destination gas needed; the relayer
+fee comes out of the minted USDC. `destination_caller` stays zero either
+way, so a manual mint can always finish the transfer.
 
 ### EVM → Stellar
 
@@ -122,60 +120,51 @@ the funds. The destination side always looks the same:
   forwarder and pays out to the G-address from hook data.
 
 The hook data layout (24 zero bytes + `uint32` version + `uint32` length +
-UTF-8 strkey) lives in `src/lib/evm/cctp.ts`. Get it wrong and funds are
-lost, so it's the most important code in the repo.
+UTF-8 strkey) lives in `src/lib/adapters/stellar.ts`, composed in exactly one
+tested place. Get it wrong and funds are lost, so it's the most important
+code in the repo.
 
-The **burn side** has three flows, selectable from the EVM panel. They all
-ultimately call `TokenMessengerV2.depositForBurnWithHook` with the same
-payload. They differ only in who submits the tx and whether the `approve`
-is bundled into the same on-chain action:
+The burn side offers two shapes, both calling
+`TokenMessengerV2.depositForBurnWithHook` with the same payload:
 
-| Flow                | User prompts                 | On-chain txs                 | Total gas | Requires                             |
-| ------------------- | ---------------------------- | ---------------------------- | --------- | ------------------------------------ |
-| 2 tx (direct)       | 2 tx confirmations           | 2                            | ~2×       | nothing extra                        |
-| 1 tx (permit)       | 1 signature + 1 confirmation | 1                            | ~1×       | `CctpWrapper` deployed on this chain |
-| 1 click (sendCalls) | 1 confirmation               | 1 (atomic) or 2 (sequential) | 1-2×      | wallet support for EIP-5792          |
+- **2 tx (direct)**: `usdc.approve` + `depositForBurnWithHook`.
+- **1 click (sendCalls)**: [EIP-5792](https://eips.ethereum.org/EIPS/eip-5792)
+  `wallet_sendCalls`, where the **wallet** bundles both calls behind one
+  confirmation. Atomic on smart wallets and EIP-7702 accounts, sequential on
+  plain EOAs. The chip auto-disables where unsupported.
 
-- **2 tx (direct)** is plain CCTP V2: `usdc.approve` + `depositForBurnWithHook`.
-- **1 tx (permit)** uses the EVM CctpWrapper (`contracts/evm/cctp-wrapper/`)
-  which bundles `permit + transferFrom + approve + depositForBurnWithHook`
-  into one Solidity call. The user signs an EIP-712 `Permit` message
-  off-chain (no gas), then submits one transaction. Half the gas of the
-  2-tx flow.
-- **1 click (sendCalls)** uses [EIP-5792](https://eips.ethereum.org/EIPS/eip-5792)
-  `wallet_sendCalls`, where the **wallet** bundles `approve` + `depositForBurnWithHook`
-  into one user confirmation. On EIP-7702 EOAs or smart wallets this runs
-  atomically (one on-chain tx). On plain EOAs the wallet still presents
-  one prompt but submits two txs sequentially. The chip auto-disables on
-  chains/wallets that don't advertise the capability.
+### Resuming any transfer
+
+Every transfer is journaled locally, so a refresh mid transfer is safe and
+unfinished transfers surface on the next visit. The resume box also accepts
+any burn transaction hash, even from other tools: the source chain is
+detected from the hash shape, the route comes back from Iris, and minting is
+permissionless.
 
 ## Limitations
 
-This is a demo, not a bridge UX:
+Still on the way to a full product:
 
 - USDC only (EURC isn't confirmed on Stellar CCTP yet).
-- Standard (finalized) transfers only, so no Fast Burn.
-- Testnet only.
-- Transfer history is in-memory; refresh wipes it.
+- Testnet only for now; the mainnet registry exists but is not yet enabled.
+- Three EVM chains + Solana today; the full CCTP V2 chain roster lands with
+  the registry expansion.
 - No mobile wallet flow beyond what the injected wallet provides.
 
 ## Layout
 
 ```text
-contracts/
-  stellar/cctp-wrapper/        # Soroban wrapper (Rust), approve_and_deposit
-  evm/cctp-wrapper/            # EVM wrapper (Solidity), bridgeWithPermit
 src/lib/
-  config.ts                    # EVM_CHAINS map, addresses, domains, RPC URLs, constants
-  stellar/                     # Freighter, USDC SAC, deposit_for_burn, mint_and_forward
-  evm/
-    cctp.ts                    # depositForBurnWithHook + permit + sendCalls flows; receiveMessage
-    usdc.ts                    # ERC-20 reads + EIP-2612 permit signing
-    capabilities.ts            # EIP-5792 wallet capability detection
-    wallet.ts                  # EIP-6963 discovery, connect/disconnect, chain switch
-    client.ts                  # cached viem PublicClient per chain
-  circle/iris.ts               # attestation polling
-  stores/transfer.svelte.ts    # state machine (idle → approve → burn → attest → mint → done)
+  registry/                    # every chain as data (testnet + mainnet), the single source of truth
+  adapters/                    # per family chain adapters; mintTarget owns the forwarder invariant
+  engine/                      # the one transfer engine: preflight, approve, burn, attest, mint
+  errors/                      # typed error codes + raw error translation to plain language
+  journal/                     # localStorage transfer journal behind resume and history
+  amounts.ts                   # strict USDC amount parsing, 6 decimal canonical units
+  stellar/  evm/  solana/      # low level chain calls (wallets, burns, mints, reads)
+  circle/                      # Iris attestation polling + fee quotes
   components/                  # one .svelte file per UI piece
 src/routes/+page.svelte        # composition
+scripts/check-circle-docs.ts   # CI diff of the registry against Circle's docs
+scripts/experiments/           # on chain safety experiments (see docs/experiments)
 ```
