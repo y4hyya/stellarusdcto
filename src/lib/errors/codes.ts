@@ -20,6 +20,8 @@ export type TransferErrorCode =
     | 'AMOUNT_INVALID'
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
+    | 'HASH_INVALID'
+    | 'WALLET_REQUIRED'
     | 'CONFIG_MISSING'
     | 'UNKNOWN';
 
@@ -113,6 +115,16 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
     RECIPIENT_INVALID: {
         userMessage: 'The recipient address is not valid for the destination chain.',
         action: 'Paste the full address again and check the chain it belongs to.',
+        retryable: true,
+    },
+    HASH_INVALID: {
+        userMessage: 'That does not look like a transaction hash from a supported chain.',
+        action: 'Paste the burn transaction hash exactly as the explorer shows it.',
+        retryable: true,
+    },
+    WALLET_REQUIRED: {
+        userMessage: 'The wallet needed for this step is not connected.',
+        action: 'Connect the highlighted wallet, then retry.',
         retryable: true,
     },
     CONFIG_MISSING: {

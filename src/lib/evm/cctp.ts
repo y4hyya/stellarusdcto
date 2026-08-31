@@ -1,4 +1,4 @@
-import { encodeFunctionData, erc20Abi, type Hex } from 'viem';
+import { encodeFunctionData, erc20Abi, toHex, type Hex } from 'viem';
 import { EVM_CCTP_CONTRACTS, EVM_CHAINS, STELLAR, type EvmChainId } from '$lib/config';
 import { encodeStellarForwarderHookData, strkeyToBytes32 } from '$lib/stellar/recipient';
 import { getPublicClient } from './client';
@@ -276,6 +276,111 @@ export async function sendCallsBridgeToStellar(args: {
     }
     // Atomic batches return one receipt covering both calls; sequential
     // batches return one per call. The burn is always the last receipt.
+    const receipts = status.receipts ?? [];
+    const burn = receipts[receipts.length - 1];
+    if (!burn?.transactionHash) {
+        throw new Error('No burn receipt returned from wallet_sendCalls');
+    }
+    return burn.transactionHash;
+}
+
+// Generalized burns used by the transfer engine. The 32 byte slots and hook
+// data arrive as a MintTarget composed by the destination adapter, so the
+// fund safety rules live in exactly one place (src/lib/adapters).
+type EngineMintTarget = import('../adapters/types').MintTarget;
+
+function targetToArgs(
+    chainId: EvmChainId,
+    amount: bigint,
+    destinationDomain: number,
+    target: EngineMintTarget,
+    maxFee: bigint,
+    finalityThreshold: number,
+) {
+    const cfg = EVM_CHAINS[chainId];
+    return {
+        cfg,
+        burnArgs: [
+            amount,
+            destinationDomain,
+            toHex(target.mintRecipient),
+            cfg.usdc,
+            toHex(target.destinationCaller),
+            maxFee,
+            finalityThreshold,
+            target.hookData ? toHex(target.hookData) : ('0x' as Hex),
+        ] as const,
+    };
+}
+
+export async function evmBurnToTarget(args: {
+    chainId: EvmChainId;
+    wallet: EvmWallet;
+    amount: bigint;
+    destinationDomain: number;
+    target: EngineMintTarget;
+    maxFee: bigint;
+    finalityThreshold: number;
+}): Promise<`0x${string}`> {
+    const { cfg, burnArgs } = targetToArgs(
+        args.chainId,
+        args.amount,
+        args.destinationDomain,
+        args.target,
+        args.maxFee,
+        args.finalityThreshold,
+    );
+    const hash = await args.wallet.walletClient.writeContract({
+        account: args.wallet.address,
+        chain: cfg.chain,
+        address: EVM_CCTP_CONTRACTS.tokenMessengerV2,
+        abi: tokenMessengerV2Abi,
+        functionName: 'depositForBurnWithHook',
+        args: burnArgs,
+    });
+    await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
+    return hash;
+}
+
+export async function evmSendCallsBurnToTarget(args: {
+    chainId: EvmChainId;
+    wallet: EvmWallet;
+    amount: bigint;
+    destinationDomain: number;
+    target: EngineMintTarget;
+    maxFee: bigint;
+    finalityThreshold: number;
+}): Promise<`0x${string}`> {
+    const { cfg, burnArgs } = targetToArgs(
+        args.chainId,
+        args.amount,
+        args.destinationDomain,
+        args.target,
+        args.maxFee,
+        args.finalityThreshold,
+    );
+    const approveData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [EVM_CCTP_CONTRACTS.tokenMessengerV2, args.amount],
+    });
+    const burnData = encodeFunctionData({
+        abi: tokenMessengerV2Abi,
+        functionName: 'depositForBurnWithHook',
+        args: burnArgs,
+    });
+    const { id } = await args.wallet.walletClient.sendCalls({
+        account: args.wallet.address,
+        chain: cfg.chain,
+        calls: [
+            { to: cfg.usdc, data: approveData },
+            { to: EVM_CCTP_CONTRACTS.tokenMessengerV2, data: burnData },
+        ],
+    });
+    const status = await args.wallet.walletClient.waitForCallsStatus({ id });
+    if (status.status !== 'success') {
+        throw new Error(`wallet_sendCalls did not confirm (status: ${status.status})`);
+    }
     const receipts = status.receipts ?? [];
     const burn = receipts[receipts.length - 1];
     if (!burn?.transactionHash) {

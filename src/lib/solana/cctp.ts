@@ -51,6 +51,61 @@ function forwarderAddress(): Address {
     return getAddressDecoder().decode(raw);
 }
 
+// Generalized burn used by the transfer engine: destination and slots come
+// from the destination adapter's MintTarget, so the slot composition rules
+// live in exactly one place (src/lib/adapters). In this app Solana only ever
+// burns toward Stellar, so hookData is always present.
+export async function solanaBurnToTarget(args: {
+    wallet: SolanaWallet;
+    amount: bigint;
+    destinationDomain: number;
+    target: import('$lib/adapters/types').MintTarget;
+    maxFee: bigint;
+    minFinalityThreshold: number;
+}): Promise<{ signature: string }> {
+    const owner = address(args.wallet.address);
+    const mint = address(SOLANA.usdc.mint);
+    const decodeAddress = getAddressDecoder();
+
+    const [burnTokenAccount] = await findAssociatedTokenPda({
+        owner,
+        tokenProgram: TOKEN_PROGRAM_ADDRESS,
+        mint,
+    });
+
+    const pdas = await derivePdas(args.destinationDomain);
+    const ownerSigner = createNoopSigner(owner);
+    const messageSentEventData = await generateKeyPairSigner();
+
+    const instruction = await getDepositForBurnWithHookInstructionAsync({
+        owner: ownerSigner,
+        eventRentPayer: ownerSigner,
+        burnTokenAccount,
+        burnTokenMint: mint,
+        messageSentEventData,
+        messageTransmitter: pdas.messageTransmitter,
+        tokenMessenger: pdas.tokenMessenger,
+        remoteTokenMessenger: pdas.remoteTokenMessenger,
+        tokenMinter: pdas.tokenMinter,
+        messageTransmitterProgram: address(SOLANA.programs.messageTransmitterV2),
+        program: TMM,
+        amount: args.amount,
+        destinationDomain: args.destinationDomain,
+        mintRecipient: decodeAddress.decode(args.target.mintRecipient),
+        destinationCaller: decodeAddress.decode(args.target.destinationCaller),
+        maxFee: args.maxFee,
+        minFinalityThreshold: args.minFinalityThreshold,
+        hookData: args.target.hookData ?? new Uint8Array(0),
+    });
+
+    const signature = await signAndSendSolanaTx({
+        wallet: args.wallet,
+        instructions: [instruction],
+        feePayerSigner: ownerSigner,
+    });
+    return { signature };
+}
+
 // Burn USDC on Solana with the Stellar-forwarder hook. mintRecipient AND
 // destinationCaller are the forwarder (the fund-bricking invariant); the real
 // G-recipient rides in hookData. Returns the burn signature for Iris polling.

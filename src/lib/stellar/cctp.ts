@@ -274,6 +274,51 @@ export async function mintAndForward(args: {
     return { hash };
 }
 
+// Generalized burn used by the transfer engine: destination and slots come
+// from the destination adapter's MintTarget, so the slot composition rules
+// live in exactly one place (src/lib/adapters). A Stellar source never burns
+// toward Stellar itself, so target.hookData is always null here; the
+// forwarded variant adds Circle's forwarding magic instead.
+export async function stellarDepositForBurn(args: {
+    caller: string;
+    amount: bigint; // Stellar 7 decimal subunits
+    destinationDomain: number;
+    target: import('../adapters/types').MintTarget;
+    maxFee: bigint;
+    finalityThreshold: number;
+    forwarded?: boolean;
+}): Promise<{ hash: string; sourceDomain: number }> {
+    const account = await stellarRpc.getAccount(args.caller);
+    const common = [
+        Address.fromString(args.caller).toScVal(),
+        nativeToScVal(args.amount, { type: 'i128' }),
+        nativeToScVal(args.destinationDomain, { type: 'u32' }),
+        bytesN32(args.target.mintRecipient),
+        Address.fromString(STELLAR.contracts.usdc).toScVal(),
+        bytesN32(args.target.destinationCaller),
+        nativeToScVal(args.maxFee, { type: 'i128' }),
+        nativeToScVal(args.finalityThreshold, { type: 'u32' }),
+    ];
+    const operation = args.forwarded
+        ? tmm.call(
+              'deposit_for_burn_with_hook',
+              ...common,
+              nativeToScVal(encodeCctpForwardHookData(), { type: 'bytes' }),
+          )
+        : tmm.call('deposit_for_burn', ...common);
+
+    const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: STELLAR.networkPassphrase,
+    })
+        .addOperation(operation)
+        .setTimeout(60)
+        .build();
+
+    const hash = await simulateSignAndSubmit(tx);
+    return { hash, sourceDomain: STELLAR.domain };
+}
+
 // Read whether a CCTP nonce was already consumed on Stellar, the on chain
 // truth behind "was this transfer minted". Iris only knows attested, never
 // minted. Simulation needs an existing source account, so pass any funded
