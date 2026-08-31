@@ -26,7 +26,10 @@ describe('parseUsdc', () => {
 
     test('rejects garbage, empty, exponential, negative, and zero input', () => {
         for (const bad of ['', '  ', '1,5', '1e5', 'abc', '-1', '1.2.3', '.']) {
-            expect(code(() => parseUsdc(bad)), bad).toBe('AMOUNT_INVALID');
+            expect(
+                code(() => parseUsdc(bad)),
+                bad,
+            ).toBe('AMOUNT_INVALID');
         }
         expect(code(() => parseUsdc('0'))).toBe('AMOUNT_INVALID');
         expect(code(() => parseUsdc('0.000000'))).toBe('AMOUNT_INVALID');

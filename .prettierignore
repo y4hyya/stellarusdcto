@@ -23,3 +23,6 @@ contracts/evm/cctp-wrapper/broadcast/
 src/lib/solana/generated/
 # Fetched Anchor IDL (source input for codegen)
 idl/
+
+# Hand tuned talk deck, keep its original formatting
+docs/eng-talk/deck.html

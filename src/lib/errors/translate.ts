@@ -40,7 +40,11 @@ export function translateError(raw: unknown, ctx: TranslateContext): TransferErr
         return new TransferError('USER_REJECTED', { raw });
     }
 
-    if (lower.includes('nonce already used') || msg.includes('Error(Contract, #6908)') || msg.includes('"Custom":6023')) {
+    if (
+        lower.includes('nonce already used') ||
+        msg.includes('Error(Contract, #6908)') ||
+        msg.includes('"Custom":6023')
+    ) {
         return new TransferError('ALREADY_MINTED', { raw });
     }
 
@@ -60,7 +64,11 @@ export function translateError(raw: unknown, ctx: TranslateContext): TransferErr
         return new TransferError('IRIS_RATE_LIMITED', { raw });
     }
 
-    if (lower.includes('failed to fetch') || lower.includes('fetch failed') || lower.includes('load failed')) {
+    if (
+        lower.includes('failed to fetch') ||
+        lower.includes('fetch failed') ||
+        lower.includes('load failed')
+    ) {
         return new TransferError('RPC_UNREACHABLE', { raw });
     }
 

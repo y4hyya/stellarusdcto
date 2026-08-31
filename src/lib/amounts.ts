@@ -24,7 +24,10 @@ export function parseUsdc(input: string): bigint {
 
 export function formatUsdc(units6: bigint): string {
     const whole = units6 / 1_000_000n;
-    const fraction = (units6 % 1_000_000n).toString().padStart(USDC_DECIMALS, '0').replace(/0+$/, '');
+    const fraction = (units6 % 1_000_000n)
+        .toString()
+        .padStart(USDC_DECIMALS, '0')
+        .replace(/0+$/, '');
     return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 

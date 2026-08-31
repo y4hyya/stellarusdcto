@@ -3,7 +3,9 @@ import { TransferError, MESSAGES } from './codes';
 
 describe('TransferError', () => {
     test('carries a code, a plain message, and the raw cause', () => {
-        const e = new TransferError('NO_TRUSTLINE', { raw: 'HostError: trustline entry is missing' });
+        const e = new TransferError('NO_TRUSTLINE', {
+            raw: 'HostError: trustline entry is missing',
+        });
         expect(e).toBeInstanceOf(Error);
         expect(e.code).toBe('NO_TRUSTLINE');
         expect(e.userMessage.length).toBeGreaterThan(10);

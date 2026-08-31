@@ -42,12 +42,14 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         retryable: true,
     },
     INSUFFICIENT_GAS: {
-        userMessage: 'The wallet does not have enough of the network fee token to pay for this transaction.',
+        userMessage:
+            'The wallet does not have enough of the network fee token to pay for this transaction.',
         action: 'Add a small amount of the fee token shown next to the chain, then try again.',
         retryable: true,
     },
     NO_TRUSTLINE: {
-        userMessage: 'The receiving Stellar account cannot hold USDC yet, it has no USDC trustline.',
+        userMessage:
+            'The receiving Stellar account cannot hold USDC yet, it has no USDC trustline.',
         action: 'Add the USDC trustline in the recipient wallet, then retry. Nothing is lost, the transfer stays completable.',
         retryable: true,
     },
@@ -92,7 +94,8 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         retryable: true,
     },
     MAX_FEE_TOO_LOW: {
-        userMessage: 'The fee ceiling for this transfer is below what the route currently requires.',
+        userMessage:
+            'The fee ceiling for this transfer is below what the route currently requires.',
         action: 'Retry so a fresh fee quote is used.',
         retryable: true,
     },
@@ -102,7 +105,8 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         retryable: true,
     },
     AMOUNT_TOO_MANY_DECIMALS: {
-        userMessage: 'USDC transfers carry at most 6 decimal places, a 7th digit would be left behind.',
+        userMessage:
+            'USDC transfers carry at most 6 decimal places, a 7th digit would be left behind.',
         action: 'Round the amount to 6 decimals.',
         retryable: true,
     },

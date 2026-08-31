@@ -1,157 +1,106 @@
-import { Networks } from '@stellar/stellar-sdk';
-import { defineChain } from 'viem';
-import { baseSepolia, sepolia } from 'viem/chains';
+// Compatibility layer over src/lib/registry. The registry is the source of
+// truth; this file re derives the old names so existing modules keep working
+// while they migrate. New code imports from $lib/registry directly. This file
+// disappears once the migration lands.
+
+import { getChain, getRegistry, stellarConfig, TESTNET } from './registry';
+import type { EvmChainEntry, SolanaChainEntry, TransferSpeed } from './registry';
+
+export { arcTestnet } from './registry/testnet';
+export type { TransferSpeed };
+
+const stellar = stellarConfig();
+const solanaEntry = getChain('solana') as SolanaChainEntry;
 
 export const STELLAR = {
-    networkPassphrase: Networks.TESTNET,
-    rpcUrl: 'https://soroban-testnet.stellar.org',
-    domain: 27,
-    explorer: 'https://stellar.expert/explorer/testnet',
+    networkPassphrase: stellar.networkPassphrase,
+    rpcUrl: stellar.rpcUrls[0],
+    domain: stellar.domain,
+    explorer: stellar.explorer,
     contracts: {
-        tokenMessengerMinter: 'CDNG7HXAPBWICI2E3AUBP3YZWZELJLYSB6F5CC7WLDTLTHVM74SLRTHP',
-        messageTransmitter: 'CBJ6MTCKKZG73PMDZCJMSFRD7DQEMI4FKDH7CGDSV4W6FHCRBCQAVVJY',
-        cctpForwarder: 'CA66Q2WFBND6V4UEB7RD4SAXSVIWMD6RA4X3U32ELVFGXV5PJK4T4VSZ',
-        usdc: 'CBIELTK6YBZJU5UP2WWQEUCYKLPU6AUNZ2BQ4WWFEIE3USCIHMXQDAMA',
-        // User-deployed wrapper that bundles approve + deposit_for_burn into
-        // one atomic invocation, signed in a single Freighter prompt.
+        ...stellar.contracts,
+        // Demo era wrapper contract, on its way out with the wrapper flows.
         bridgeWrapper: 'CCR6VA3W3R3O23MEKY64J5ABIKB5MUTQYN5NVY4VE7FIZT7OTOELS5AE',
     },
-    usdc: {
-        code: 'USDC',
-        issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-        decimals: 7,
-    },
+    usdc: { code: stellar.usdc.code, issuer: stellar.usdc.issuer, decimals: 7 },
 } as const;
 
-// Solana CCTP V2. Program IDs are deterministic (identical on devnet and
-// mainnet), so only the cluster + USDC mint differ. Domain 5. This demo only
-// bridges Solana <-> Stellar, so Solana is both a burn source and a mint
-// destination but never pairs with the EVM chains.
 export const SOLANA = {
-    cluster: 'devnet',
-    rpcUrl: 'https://api.devnet.solana.com',
-    domain: 5,
-    explorer: 'https://explorer.solana.com', // append ?cluster=devnet to links
+    cluster: solanaEntry.cluster,
+    rpcUrl: solanaEntry.rpcUrls[0],
+    domain: solanaEntry.domain,
+    explorer: solanaEntry.explorer,
     programs: {
-        messageTransmitterV2: 'CCTPV2Sm4AdWt5296sk4P66VBZ7bEhcARwFaaS9YPbeC',
-        tokenMessengerMinterV2: 'CCTPV2vPZJS2u2BBsUoscuikbYjnpFmbFsvVuJdgUMQe',
+        messageTransmitterV2: solanaEntry.messageTransmitter,
+        tokenMessengerMinterV2: solanaEntry.tokenMessengerMinter,
     },
-    usdc: {
-        mint: '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU',
-        decimals: 6,
-    },
+    usdc: { mint: solanaEntry.usdcMint, decimals: 6 },
 } as const;
 
-// CCTP V2 deploys to the same addresses on every supported EVM chain via
-// deterministic deployment, so these are constants. Only USDC and the
-// chain/domain differ per chain.
+const evmEntries = TESTNET.chains.filter((c): c is EvmChainEntry => c.family === 'evm');
+
 export const EVM_CCTP_CONTRACTS = {
-    tokenMessengerV2: '0x8FE6B999Dc680CcFDD5Bf7EB0974218be2542DAA',
-    messageTransmitterV2: '0xE737e5cEBEEBa77EFE34D4aa090756590b1CE275',
+    tokenMessengerV2: evmEntries[0].tokenMessenger,
+    messageTransmitterV2: evmEntries[0].messageTransmitter,
 } as const;
 
-// Arc is Circle's L1: EVM-compatible, ~2s blocks, gas paid in USDC, finality
-// expected to be much faster than rollups (no L1 settlement dependency).
-export const arcTestnet = defineChain({
-    id: 5042002,
-    name: 'Arc Testnet',
-    nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 6 },
-    rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
-    blockExplorers: { default: { name: 'ArcScan', url: 'https://testnet.arcscan.app' } },
-    testnet: true,
-});
+export type EvmChainId = 'arc' | 'base' | 'ethereum';
 
 export type EvmChainConfig = {
-    id: 'arc' | 'base' | 'ethereum';
+    id: EvmChainId;
     label: string;
-    chain: ReturnType<typeof defineChain> | typeof baseSepolia | typeof sepolia;
+    chain: EvmChainEntry['chain'];
     domain: number;
     explorer: string;
     usdc: `0x${string}`;
     usdcDecimals: number;
     gasNote: string;
-    /**
-     * Approximate Circle attestation wait when this chain is the SOURCE of a
-     * burn. Undefined means "fast enough that a wait UI isn't needed."
-     */
     attestationEtaMs?: number;
-    /**
-     * User-deployed CctpWrapper contract. When present, the EVM→Stellar flow
-     * can take the single-signature permit path instead of approve + burn.
-     */
     bridgeWrapper?: `0x${string}`;
 };
 
-export const EVM_CHAINS: Record<'arc' | 'base' | 'ethereum', EvmChainConfig> = {
-    arc: {
-        id: 'arc',
-        label: 'Arc Testnet',
-        chain: arcTestnet,
-        domain: 26,
-        explorer: 'https://testnet.arcscan.app',
-        usdc: '0x3600000000000000000000000000000000000000',
-        usdcDecimals: 6,
-        gasNote: 'Gas paid in USDC.',
-        bridgeWrapper: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd', // deployed from contracts/evm/cctp-wrapper
-    },
-    base: {
-        id: 'base',
-        label: 'Base Sepolia',
-        chain: baseSepolia,
-        domain: 6,
-        explorer: 'https://sepolia.basescan.org',
-        usdc: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-        usdcDecimals: 6,
-        gasNote: 'Gas paid in ETH.',
-        attestationEtaMs: 15 * 60_000,
-        bridgeWrapper: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd', // deployed from contracts/evm/cctp-wrapper
-    },
-    ethereum: {
-        id: 'ethereum',
-        label: 'Ethereum Sepolia',
-        chain: sepolia,
-        domain: 0,
-        explorer: 'https://sepolia.etherscan.io',
-        usdc: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
-        usdcDecimals: 6,
-        gasNote: 'Gas paid in ETH.',
-        // Ethereum L1 finality is the slowest of the demo chains for a Standard
-        // (finalized) transfer. No CctpWrapper deployed here, so the EVM→Stellar
-        // permit / send-calls flows fall back to two-tx on this chain.
-        attestationEtaMs: 19 * 60_000,
-    },
+// Demo era wrapper contract addresses, on their way out with the wrapper flows.
+const WRAPPERS: Partial<Record<EvmChainId, `0x${string}`>> = {
+    arc: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd',
+    base: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd',
 };
 
-export type EvmChainId = keyof typeof EVM_CHAINS;
-export const DEFAULT_EVM_CHAIN: EvmChainId = 'arc';
+export const EVM_CHAINS = Object.fromEntries(
+    evmEntries.map((entry) => [
+        entry.id,
+        {
+            id: entry.id as EvmChainId,
+            label: entry.label,
+            chain: entry.chain,
+            domain: entry.domain,
+            explorer: entry.explorer,
+            usdc: entry.usdc,
+            usdcDecimals: 6,
+            gasNote: entry.gasNote,
+            attestationEtaMs: entry.attestationEtaMs,
+            bridgeWrapper: WRAPPERS[entry.id as EvmChainId],
+        } satisfies EvmChainConfig,
+    ]),
+) as Record<EvmChainId, EvmChainConfig>;
 
-export const IRIS_API = 'https://iris-api-sandbox.circle.com';
+export const DEFAULT_EVM_CHAIN = getRegistry().defaultChainId as EvmChainId;
+
+export const IRIS_API = getRegistry().irisBase;
 
 // CCTP V2 finality thresholds for the burn.
-//   STANDARD (2000) = wait for source-chain finality (~13 min on L2s,
-//                     seconds on Arc). minimumFee is 0.
+//   STANDARD (2000) = wait for source chain finality. minimumFee is 0.
 //   FAST     (1000) = mint before finality; Circle charges a fast fee
 //                     (basis points of the amount) bounded by max_fee.
 export const STANDARD_THRESHOLD = 2000;
 export const FAST_THRESHOLD = 1000;
-
-export type TransferSpeed = 'standard' | 'fast';
 export const DEFAULT_SPEED: TransferSpeed = 'standard';
 
 // Defensive max_fee buffers. The burn reverts with InsufficientMaxFee
 // (#7105) if Circle's configured min_fee for the burn token exceeds this.
-// Today min_fee is 0 on all CCTP V2 deployments; non-zero buffers match
-// Circle's quickstart and leave headroom if Circle starts charging.
-//
-// Units differ by chain:
-//   - STELLAR_MAX_FEE is in 7-decimal Stellar USDC subunits.
-//       100_000  =  $0.01
-//   - EVM_MAX_FEE is in the canonical 6-decimal CCTP unit (same as USDC
-//     on every EVM chain).
-//       500      =  $0.0005
+// Units: STELLAR_MAX_FEE is 7 decimal Stellar subunits (100_000 = $0.01);
+// the others are canonical 6 decimal USDC units (500 = $0.0005).
 export const STELLAR_MAX_FEE = 100_000n;
 export const EVM_MAX_FEE = 500n;
-// Solana USDC is 6-dp like EVM, so the same 500n (≈ $0.0005) buffer applies.
 export const SOLANA_MAX_FEE = 500n;
 
 // ─────────────────────────────────────────────────────────────────────
@@ -163,7 +112,7 @@ export const SOLANA_MAX_FEE = 500n;
 //     `inbound` arrives on Stellar (Stellar mints). Only meaningful because
 //     Stellar is this repo's fixed vantage point, so never use these two words
 //     in a sentence that isn't about Stellar.
-//  2. Role within a single transfer. `source` and `destination`, chain-neutral,
+//  2. Role within a single transfer. `source` and `destination`, chain neutral,
 //     matching CCTP's own field names (sourceDomain, destinationDomain). Attach
 //     a chain with a clause ("when Stellar is the destination"), not a compound
 //     ("Stellar-destination").
@@ -173,35 +122,13 @@ export const SOLANA_MAX_FEE = 500n;
 export type Direction =
     'stellar-to-evm' | 'evm-to-stellar' | 'solana-to-stellar' | 'stellar-to-solana';
 
-// The right-side chain in the main-page selector: an EVM chain or Solana.
+// The right side chain in the main page selector: an EVM chain or Solana.
 export type RightChain = EvmChainId | 'solana';
 
-// On the Stellar→EVM side the user picks a transaction shape:
-//  - 'wrapper'  : one Soroban tx via the bridge wrapper contract (combined
-//                 approve + deposit_for_burn under one Freighter prompt)
-//  - 'two-tx'   : separate `approve` and `deposit_for_burn` invocations,
-//                 same as plain CCTP without the wrapper
-// Mostly here so the demo can show the flows side-by-side.
+// Transaction shape pickers from the demo era. The wrapper values are being
+// removed with the wrapper flows.
 export type OutboundFlow = 'wrapper' | 'two-tx';
-// Default to the plain CCTP path so the demo opens on the typical
-// `approve` → `deposit_for_burn` experience. Users can flip to the
-// wrapper-contract flow from the StellarPanel toggle.
 export const DEFAULT_OUTBOUND_FLOW: OutboundFlow = 'two-tx';
-
-// Orthogonal to OutboundFlow: whether to tag the burn with the Circle
-// Crosschain Forwarding Service magic hookData. When on, both the wrapper and
-// two-tx shapes route through the *_with_hook variant so Circle's hosted relayer
-// auto-mints on the EVM destination (Stellar is not a documented forwarding
-// source; destination_caller stays zero so a manual mint can still recover the
-// funds if the relayer ignores it). EXPERIMENTAL.
 export const DEFAULT_FORWARDING = false;
-
-// EVM→Stellar mirror of OutboundFlow. Values:
-//   'two-tx'     plain CCTP: approve, then depositForBurnWithHook.
-//   'wrapper'    CctpWrapper: EIP-2612 permit + bundled depositForBurnWithHook
-//                in one user-submitted tx.
-//   'send-calls' EIP-5792 wallet_sendCalls: the WALLET bundles approve +
-//                depositForBurnWithHook into a single user confirmation. May
-//                run atomically (smart wallets, EIP-7702) or sequentially.
 export type InboundFlow = 'wrapper' | 'two-tx' | 'send-calls';
 export const DEFAULT_INBOUND_FLOW: InboundFlow = 'two-tx';

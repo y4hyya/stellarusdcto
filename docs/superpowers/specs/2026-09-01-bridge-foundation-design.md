@@ -45,12 +45,18 @@ Data only, per environment, swapped wholesale — mixing environments is structu
 
 ```ts
 type EvmChainEntry = {
-  id: string; label: string; family: 'evm';
-  domain: number; chain: Chain;              // viem chain object
-  usdc: `0x${string}`; usdcDecimals: 6;
-  tokenMessenger: `0x${string}`;             // per chain slot, defaulted from the env pair
-  messageTransmitter: `0x${string}`;         // (EDGE mainnet is the known override)
-  attestationEtaMs?: number; fastSource: boolean; gasNote: string;
+  id: string;
+  label: string;
+  family: 'evm';
+  domain: number;
+  chain: Chain; // viem chain object
+  usdc: `0x${string}`;
+  usdcDecimals: 6;
+  tokenMessenger: `0x${string}`; // per chain slot, defaulted from the env pair
+  messageTransmitter: `0x${string}`; // (EDGE mainnet is the known override)
+  attestationEtaMs?: number;
+  fastSource: boolean;
+  gasNote: string;
 };
 ```
 
@@ -64,11 +70,11 @@ One `ChainAdapter` per family. The interface owns the dangerous parts:
 interface ChainAdapter {
   entry: ChainEntry;
   validateRecipient(address: string): boolean;
-  mintTarget(recipient: string): Promise<MintTarget>;   // { mintRecipient32, destinationCaller32, hookData }
+  mintTarget(recipient: string): Promise<MintTarget>; // { mintRecipient32, destinationCaller32, hookData }
   isNonceUsed(nonceHex: string): Promise<boolean | null>;
   checkDestination(recipient: string, amount6: bigint): Promise<TransferError[]>;
   approveIfNeeded(wallet, amount: bigint): Promise<'approved' | 'not_needed'>;
-  burn(wallet, params: BurnParams): Promise<string>;    // burn tx id
+  burn(wallet, params: BurnParams): Promise<string>; // burn tx id
   submitMint(wallet, messageHex: string, attestationHex: string): Promise<string>;
   translate(raw: unknown, phase: Phase): TransferError | null;
 }
