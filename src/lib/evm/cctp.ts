@@ -284,6 +284,32 @@ export async function sendCallsBridgeToStellar(args: {
     return burn.transactionHash;
 }
 
+// Whether a CCTP nonce was already consumed on this chain. The public
+// usedNonces mapping is the free pre mint check and the post mint proof;
+// Iris status never says minted.
+const usedNoncesAbi = [
+    {
+        type: 'function',
+        name: 'usedNonces',
+        stateMutability: 'view',
+        inputs: [{ name: 'nonce', type: 'bytes32' }],
+        outputs: [{ type: 'uint256' }],
+    },
+] as const;
+
+export async function isNonceUsedOnEvm(
+    entry: { id: string; messageTransmitter: `0x${string}` },
+    nonce: Hex,
+): Promise<boolean> {
+    const used = await getPublicClient(entry.id as EvmChainId).readContract({
+        address: entry.messageTransmitter,
+        abi: usedNoncesAbi,
+        functionName: 'usedNonces',
+        args: [nonce],
+    });
+    return used === 1n;
+}
+
 // Inverse direction (Stellar → EVM): after Circle attests, anyone can
 // submit the message + signature to MessageTransmitterV2 and mint USDC
 // to the embedded recipient. `receiveMessage` is permissionless when

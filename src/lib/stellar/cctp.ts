@@ -1,9 +1,11 @@
 import {
+    Account,
     Address,
     BASE_FEE,
     Contract,
     TransactionBuilder,
     nativeToScVal,
+    scValToNative,
     xdr,
 } from '@stellar/stellar-sdk';
 import { SOLANA, STELLAR } from '$lib/config';
@@ -270,6 +272,28 @@ export async function mintAndForward(args: {
 
     const hash = await simulateSignAndSubmit(tx);
     return { hash };
+}
+
+// Read whether a CCTP nonce was already consumed on Stellar, the on chain
+// truth behind "was this transfer minted". Iris only knows attested, never
+// minted. Simulation needs an existing source account, so pass any funded
+// viewer (normally the connected wallet).
+export async function isNonceUsedOnStellar(nonce: Uint8Array, viewer: string): Promise<boolean> {
+    const mt = new Contract(STELLAR.contracts.messageTransmitter);
+    const account = await stellarRpc.getAccount(viewer).catch(() => new Account(viewer, '0'));
+    const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: STELLAR.networkPassphrase,
+    })
+        .addOperation(mt.call('is_nonce_used', bytesN32(nonce)))
+        .setTimeout(30)
+        .build();
+    const sim = await stellarRpc.simulateTransaction(tx);
+    if ('error' in sim && sim.error) {
+        throw new Error(`Soroban simulation failed: ${sim.error}`);
+    }
+    const result = (sim as { result?: { retval: unknown } }).result;
+    return result ? scValToNative(result.retval as never) === true : false;
 }
 
 export function leftPad32FromHex(hex: `0x${string}`): Uint8Array {

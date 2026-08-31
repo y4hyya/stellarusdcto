@@ -9,13 +9,7 @@ import type { NetworkEnv } from '../registry/types';
 const KEY = 'stellarusdcto.journal.v1';
 
 export type TransferPhase =
-    | 'preflight'
-    | 'approving'
-    | 'burning'
-    | 'attesting'
-    | 'minting'
-    | 'done'
-    | 'error';
+    'preflight' | 'approving' | 'burning' | 'attesting' | 'minting' | 'done' | 'error';
 
 export type TransferRecord = {
     /** Burn tx id once known, otherwise a provisional id. */
