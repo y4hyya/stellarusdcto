@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from 'svelte';
     import StellarPanel from '$lib/components/StellarPanel.svelte';
     import DestinationPanel from '$lib/components/DestinationPanel.svelte';
     import DirectionSwitcher from '$lib/components/DirectionSwitcher.svelte';
@@ -9,22 +10,22 @@
     import EvmBurnPreview from '$lib/components/EvmBurnPreview.svelte';
     import SolanaBurnPreview from '$lib/components/SolanaBurnPreview.svelte';
     import ResumeForm from '$lib/components/ResumeForm.svelte';
-    import { createTransferStore } from '$lib/stores/transfer.svelte';
+    import { createTransferEngine, type EngineWallets } from '$lib/engine/transfer.svelte';
+    import type { FlowKind } from '$lib/engine/core';
+    import { unfinishedTransfers, type TransferRecord } from '$lib/journal/journal';
+    import { getChain } from '$lib/registry';
     import type { FreighterState } from '$lib/stellar/freighter';
     import type { EvmWallet } from '$lib/evm/wallet';
     import type { SolanaWallet } from '$lib/solana/wallet';
     import type { SendCallsCapability } from '$lib/evm/capabilities';
+    import { shortAddr } from '$lib/utils';
     import {
         DEFAULT_EVM_CHAIN,
         DEFAULT_FORWARDING,
         DEFAULT_INBOUND_FLOW,
-        DEFAULT_OUTBOUND_FLOW,
         DEFAULT_SPEED,
-        EVM_CHAINS,
-        type Direction,
         type EvmChainId,
         type InboundFlow,
-        type OutboundFlow,
         type RightChain,
         type TransferSpeed,
     } from '$lib/config';
@@ -38,39 +39,43 @@
     let solana = $state<SolanaWallet | null>(null);
     let evmChainId = $state<EvmChainId>(DEFAULT_EVM_CHAIN);
     // The right-side selector value (an EVM chain id, or 'solana') + the
-    // orientation flag together derive `direction`.
+    // orientation flag together derive the route.
     let rightChain = $state<RightChain>(DEFAULT_EVM_CHAIN);
     let stellarIsSource = $state(true);
-    let outboundFlow = $state<OutboundFlow>(DEFAULT_OUTBOUND_FLOW);
     let forwarding = $state<boolean>(DEFAULT_FORWARDING);
     let inboundFlow = $state<InboundFlow>(DEFAULT_INBOUND_FLOW);
     let sendCallsCap = $state<SendCallsCapability>({ supported: false, atomic: false });
     let amount = $state('');
     let speed = $state<TransferSpeed>(DEFAULT_SPEED);
+    let unfinished = $state<TransferRecord[]>([]);
 
     // Component instance handles, populated by `bind:this`. Used to imperatively
     // refresh each panel's balance after a successful transfer.
     let stellarPanel = $state<{ refresh: () => Promise<void> } | undefined>();
     let destPanel = $state<{ refresh: () => Promise<void> } | undefined>();
 
-    const transfer = createTransferStore(
-        'stellar-to-evm',
-        DEFAULT_EVM_CHAIN,
-        DEFAULT_OUTBOUND_FLOW,
-        DEFAULT_FORWARDING,
-        DEFAULT_INBOUND_FLOW,
+    const transfer = createTransferEngine('stellar', DEFAULT_EVM_CHAIN);
+
+    // The registry id of the non Stellar side ('solana' doubles as its id).
+    let rightId = $derived(rightChain === 'solana' ? 'solana' : evmChainId);
+    let sourceId = $derived(stellarIsSource ? 'stellar' : rightId);
+    let destId = $derived(stellarIsSource ? rightId : 'stellar');
+    let flow = $derived<FlowKind>(
+        stellarIsSource
+            ? forwarding
+                ? 'forwarded'
+                : 'direct'
+            : rightChain !== 'solana' && inboundFlow === 'send-calls'
+              ? 'sendCalls'
+              : 'direct',
     );
 
-    let direction = $derived<Direction>(
-        rightChain === 'solana'
-            ? stellarIsSource
-                ? 'stellar-to-solana'
-                : 'solana-to-stellar'
-            : stellarIsSource
-              ? 'stellar-to-evm'
-              : 'evm-to-stellar',
-    );
-    let rightLabel = $derived(rightChain === 'solana' ? 'Solana' : EVM_CHAINS[rightChain].label);
+    // Keep the idle step preview in sync with the pickers.
+    $effect(() => {
+        transfer.configure(sourceId, destId, flow);
+    });
+
+    let rightLabel = $derived(getChain(rightId).label);
     let rightConnected = $derived(rightChain === 'solana' ? !!solana : !!evm);
     let bothConnected = $derived(!!stellar.address && rightConnected);
     let busy = $derived(
@@ -81,44 +86,38 @@
     let canSubmit = $derived(bothConnected && amount.trim() !== '' && !busy);
 
     // Fast Transfer (mint-before-finality) applies when the SOURCE chain has a
-    // real finality delay to mint into: Solana yes; EVM chains with an
-    // attestation ETA yes; but not Stellar or Arc (they finalize in seconds, so
-    // there's no pre-finality window). Outbound is always Standard.
-    let fastAllowed = $derived(
-        !stellarIsSource &&
-            (rightChain === 'solana' || EVM_CHAINS[rightChain].attestationEtaMs !== undefined),
-    );
+    // real finality delay to mint into. Outbound from Stellar is always Standard.
+    let fastAllowed = $derived(!stellarIsSource && getChain(rightId).fastSource);
     let effectiveSpeed = $derived<TransferSpeed>(fastAllowed ? speed : 'standard');
+
+    let wallets = $derived<EngineWallets>({
+        stellarAddress: stellar.address ?? undefined,
+        evm: evm ?? undefined,
+        solana: solana ?? undefined,
+    });
+
+    onMount(() => {
+        unfinished = unfinishedTransfers();
+    });
 
     async function send() {
         if (!stellar.address) return;
-        if (rightChain === 'solana') {
-            if (!solana) return;
-            await transfer.start({
-                direction,
-                stellarAddress: stellar.address,
-                solanaWallet: solana,
-                // Only used by the stellar-to-solana burn (wrapper / forwarding
-                // combinations); ignored for solana-to-stellar.
-                outboundFlow,
-                forwarding,
-                amount: amount.trim(),
-                speed: effectiveSpeed,
-            });
-        } else {
-            if (!evm) return;
-            await transfer.start({
-                direction,
-                stellarAddress: stellar.address,
-                evmWallet: evm,
-                evmChainId,
-                outboundFlow,
-                forwarding,
-                inboundFlow,
-                amount: amount.trim(),
-                speed: effectiveSpeed,
-            });
-        }
+        const recipient = stellarIsSource
+            ? rightChain === 'solana'
+                ? solana?.address
+                : evm?.address
+            : stellar.address;
+        if (!recipient) return;
+        await transfer.start({
+            sourceId,
+            destId,
+            flow,
+            amount: amount.trim(),
+            speed: effectiveSpeed,
+            recipient,
+            wallets,
+        });
+        unfinished = unfinishedTransfers();
         // Skip refetch on error, since the burn may not have landed, and a failed RPC
         // call here would clobber the error state shown to the user.
         if (transfer.state.phase === 'done') {
@@ -127,25 +126,8 @@
     }
 
     async function resume(burnHash: string) {
-        if (!stellar.address) return;
-        if (rightChain === 'solana') {
-            if (!solana) return;
-            await transfer.resume({
-                burnHash,
-                direction,
-                stellarAddress: stellar.address,
-                solanaWallet: solana,
-            });
-        } else {
-            if (!evm) return;
-            await transfer.resume({
-                burnHash,
-                direction,
-                stellarAddress: stellar.address,
-                evmWallet: evm,
-                evmChainId,
-            });
-        }
+        await transfer.resume({ burnHash, wallets });
+        unfinished = unfinishedTransfers();
         if (transfer.state.phase === 'done') {
             await Promise.all([stellarPanel?.refresh(), destPanel?.refresh()]);
         }
@@ -154,6 +136,7 @@
     function reset() {
         transfer.reset();
         amount = '';
+        unfinished = unfinishedTransfers();
     }
 </script>
 
@@ -170,9 +153,8 @@
         <StellarPanel
             bind:this={stellarPanel}
             bind:freighter={stellar}
-            bind:outboundFlow
             bind:forwarding
-            {direction}
+            {stellarIsSource}
             disabled={busy}
         />
         <DestinationPanel
@@ -183,10 +165,27 @@
             bind:solanaWallet={solana}
             bind:inboundFlow
             bind:sendCallsCap
-            {direction}
+            {stellarIsSource}
             disabled={busy}
         />
     </div>
+
+    {#if unfinished.length > 0 && transfer.state.phase === 'idle'}
+        <aside class="unfinished">
+            <strong>You have {unfinished.length === 1 ? 'a transfer' : 'transfers'} waiting.</strong
+            >
+            <span class="unfinished-sub">
+                A burn happened but the mint has not landed yet. Nothing is lost, pick it back up:
+            </span>
+            {#each unfinished.slice(0, 3) as record (record.id)}
+                <button class="unfinished-row" onclick={() => resume(record.burnTxId ?? record.id)}>
+                    <code>{shortAddr(record.burnTxId ?? record.id)}</code>
+                    <span>{record.sourceId} → {record.destId}</span>
+                    <span class="unfinished-action">Resume</span>
+                </button>
+            {/each}
+        </aside>
+    {/if}
 
     <section class="action">
         <DirectionSwitcher bind:stellarIsSource otherLabel={rightLabel} disabled={busy} />
@@ -205,9 +204,9 @@
             <p class="hint">Connect both wallets to enable transfers.</p>
         {/if}
         {#if transfer.state.phase === 'idle'}
-            <ResumeForm {direction} {bothConnected} disabled={busy} onResume={resume} />
+            <ResumeForm disabled={busy} onResume={resume} />
         {/if}
-        {#if direction === 'evm-to-stellar' && stellar.address && evm && transfer.state.phase === 'idle'}
+        {#if !stellarIsSource && rightChain !== 'solana' && stellar.address && evm && transfer.state.phase === 'idle'}
             <EvmBurnPreview
                 evmAddress={evm.address}
                 {evmChainId}
@@ -219,13 +218,12 @@
             />
             <HookDataPreview mode="forwarder" stellarRecipient={stellar.address} />
         {/if}
-        {#if direction === 'stellar-to-evm' && stellar.address && evm && transfer.state.phase === 'idle'}
+        {#if stellarIsSource && rightChain !== 'solana' && stellar.address && evm && transfer.state.phase === 'idle'}
             <StellarBurnPreview
                 stellarAddress={stellar.address}
                 evmRecipient={evm.address}
                 {evmChainId}
                 {amount}
-                {outboundFlow}
                 {forwarding}
                 speed={effectiveSpeed}
             />
@@ -233,7 +231,7 @@
                 <HookDataPreview mode="cctp-forward" />
             {/if}
         {/if}
-        {#if direction === 'solana-to-stellar' && stellar.address && solana && transfer.state.phase === 'idle'}
+        {#if !stellarIsSource && rightChain === 'solana' && stellar.address && solana && transfer.state.phase === 'idle'}
             <SolanaBurnPreview
                 solanaAddress={solana.address}
                 stellarRecipient={stellar.address}
@@ -242,12 +240,11 @@
             />
             <HookDataPreview mode="forwarder" stellarRecipient={stellar.address} />
         {/if}
-        {#if direction === 'stellar-to-solana' && stellar.address && solana && transfer.state.phase === 'idle'}
+        {#if stellarIsSource && rightChain === 'solana' && stellar.address && solana && transfer.state.phase === 'idle'}
             <StellarBurnPreview
                 stellarAddress={stellar.address}
                 solanaRecipient={solana.address}
                 {amount}
-                {outboundFlow}
                 {forwarding}
                 speed={effectiveSpeed}
             />
@@ -274,7 +271,7 @@
         <a href="https://faucet.circle.com" target="_blank" rel="noreferrer">USDC faucet</a>
         ·
         <a href="https://github.com/ElliotFriend/stellar-cctp-demo" target="_blank" rel="noreferrer"
-            >Project Source Code</a
+            >Built on Elliot Friend's stellar-cctp-demo</a
         >
     </footer>
 </main>
@@ -320,6 +317,54 @@
         .wallets {
             grid-template-columns: 1fr;
         }
+    }
+
+    .unfinished {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 0.85rem 1rem;
+        background: color-mix(in srgb, var(--warning) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
+        border-radius: var(--radius-lg);
+        font-size: 0.9rem;
+    }
+
+    .unfinished strong {
+        color: var(--warning);
+    }
+
+    .unfinished-sub {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+    }
+
+    .unfinished-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        background: var(--bg-elev-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.5rem 0.75rem;
+        color: var(--text);
+        font-size: 0.85rem;
+        text-align: left;
+    }
+
+    .unfinished-row:hover {
+        border-color: var(--accent);
+    }
+
+    .unfinished-row code {
+        font-family: var(--mono);
+        color: var(--text-muted);
+    }
+
+    .unfinished-action {
+        margin-left: auto;
+        color: var(--accent);
+        font-weight: 600;
     }
 
     .action {

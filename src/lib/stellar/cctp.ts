@@ -8,183 +8,18 @@ import {
     scValToNative,
     xdr,
 } from '@stellar/stellar-sdk';
-import { SOLANA, STELLAR } from '$lib/config';
+import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
 import { simulateSignAndSubmit } from './tx';
 
 const tmm = new Contract(STELLAR.contracts.tokenMessengerMinter);
-const bridgeWrapper = new Contract(STELLAR.contracts.bridgeWrapper);
 const forwarder = new Contract(STELLAR.contracts.cctpForwarder);
-
-// Direct call to the TMM's `deposit_for_burn`. Caller must `approveUsdc` for
-// the TMM as a spender on USDC SAC first, because the TMM pulls funds via
-// `transfer_from`, not user-authorized `transfer`. Two transactions total.
-export async function depositForBurnToEvm(args: {
-    caller: string;
-    amount: bigint; // Stellar 7-decimal subunits
-    destinationDomain: number;
-    evmRecipient: `0x${string}`;
-    maxFee: bigint;
-    finalityThreshold: number;
-}): Promise<{ hash: string; sourceDomain: number }> {
-    const account = await stellarRpc.getAccount(args.caller);
-
-    const mintRecipient = leftPad32FromHex(args.evmRecipient);
-    const destinationCaller = ZERO_BYTES_32;
-
-    const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            tmm.call(
-                'deposit_for_burn',
-                Address.fromString(args.caller).toScVal(),
-                nativeToScVal(args.amount, { type: 'i128' }),
-                nativeToScVal(args.destinationDomain, { type: 'u32' }),
-                bytesN32(mintRecipient),
-                Address.fromString(STELLAR.contracts.usdc).toScVal(),
-                bytesN32(destinationCaller),
-                nativeToScVal(args.maxFee, { type: 'i128' }),
-                nativeToScVal(args.finalityThreshold, { type: 'u32' }),
-            ),
-        )
-        .setTimeout(60)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
-    return { hash, sourceDomain: STELLAR.domain };
-}
-
-// Burn USDC on Stellar bound for Solana (domain 5). mintRecipient is the
-// recipient's Solana USDC ATA as raw 32 bytes (see solanaAtaToBytes32).
-// destinationCaller stays zero, since the Solana mint is permissionless. No hook.
-export async function depositForBurnToSolana(args: {
-    caller: string;
-    amount: bigint; // Stellar 7-decimal subunits
-    mintRecipient: Uint8Array; // 32 bytes, the recipient's Solana USDC ATA
-    maxFee: bigint;
-    finalityThreshold: number;
-}): Promise<{ hash: string; sourceDomain: number }> {
-    const account = await stellarRpc.getAccount(args.caller);
-
-    const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            tmm.call(
-                'deposit_for_burn',
-                Address.fromString(args.caller).toScVal(),
-                nativeToScVal(args.amount, { type: 'i128' }),
-                nativeToScVal(SOLANA.domain, { type: 'u32' }),
-                bytesN32(args.mintRecipient),
-                Address.fromString(STELLAR.contracts.usdc).toScVal(),
-                bytesN32(ZERO_BYTES_32),
-                nativeToScVal(args.maxFee, { type: 'i128' }),
-                nativeToScVal(args.finalityThreshold, { type: 'u32' }),
-            ),
-        )
-        .setTimeout(60)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
-    return { hash, sourceDomain: STELLAR.domain };
-}
-
-// Calls the user-deployed wrapper contract's `approve_and_deposit`, which
-// internally `approve`s the TMM as a USDC spender and then invokes
-// `deposit_for_burn`, both within one Soroban transaction. Soroban's auth
-// tree lets a single user signature authorize both nested calls, so the user
-// sees one Freighter prompt and pays one network fee.
-export async function bridgeUsdcToEvm(args: {
-    caller: string;
-    amount: bigint; // Stellar 7-decimal subunits
-    destinationDomain: number;
-    mintRecipient: Uint8Array; // pre-encoded 32-byte recipient (EVM pad / Solana ATA)
-    maxFee: bigint;
-    finalityThreshold: number;
-}): Promise<{ hash: string; sourceDomain: number }> {
-    const account = await stellarRpc.getAccount(args.caller);
-
-    const mintRecipient = args.mintRecipient;
-    const destinationCaller = ZERO_BYTES_32;
-
-    const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            bridgeWrapper.call(
-                'approve_and_deposit',
-                Address.fromString(STELLAR.contracts.tokenMessengerMinter).toScVal(),
-                Address.fromString(args.caller).toScVal(),
-                nativeToScVal(args.amount, { type: 'i128' }),
-                nativeToScVal(args.destinationDomain, { type: 'u32' }),
-                bytesN32(mintRecipient),
-                Address.fromString(STELLAR.contracts.usdc).toScVal(),
-                bytesN32(destinationCaller),
-                nativeToScVal(args.maxFee, { type: 'i128' }),
-                nativeToScVal(args.finalityThreshold, { type: 'u32' }),
-            ),
-        )
-        .setTimeout(60)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
-    return { hash, sourceDomain: STELLAR.domain };
-}
-
-// Wrapper flow + Circle forwarding: the wrapper's `approve_and_deposit_with_hook`
-// mirrors `approve_and_deposit` but forwards a trailing `hook_data` into the
-// inner `deposit_for_burn_with_hook`. One Soroban tx, one Freighter prompt, with
-// the forwarding magic carried through. hookData is the same 32-byte payload the
-// two-tx forwarding path uses.
-export async function bridgeUsdcToEvmWithHook(args: {
-    caller: string;
-    amount: bigint; // Stellar 7-decimal subunits
-    destinationDomain: number;
-    mintRecipient: Uint8Array; // pre-encoded 32-byte recipient
-    maxFee: bigint;
-    finalityThreshold: number;
-}): Promise<{ hash: string; sourceDomain: number }> {
-    const account = await stellarRpc.getAccount(args.caller);
-
-    const mintRecipient = args.mintRecipient;
-    const destinationCaller = ZERO_BYTES_32;
-    const hookData = encodeCctpForwardHookData();
-
-    const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            bridgeWrapper.call(
-                'approve_and_deposit_with_hook',
-                Address.fromString(STELLAR.contracts.tokenMessengerMinter).toScVal(),
-                Address.fromString(args.caller).toScVal(),
-                nativeToScVal(args.amount, { type: 'i128' }),
-                nativeToScVal(args.destinationDomain, { type: 'u32' }),
-                bytesN32(mintRecipient),
-                Address.fromString(STELLAR.contracts.usdc).toScVal(),
-                bytesN32(destinationCaller),
-                nativeToScVal(args.maxFee, { type: 'i128' }),
-                nativeToScVal(args.finalityThreshold, { type: 'u32' }),
-                nativeToScVal(hookData, { type: 'bytes' }),
-            ),
-        )
-        .setTimeout(60)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
-    return { hash, sourceDomain: STELLAR.domain };
-}
 
 // ─────────────────────────────────────────────────────────────────────
 //  EXPERIMENTAL: Circle Crosschain Forwarding Service trigger (outbound)
 // ─────────────────────────────────────────────────────────────────────
-// Same as depositForBurnToEvm, but calls deposit_for_burn_with_hook with the
-// Circle forwarding-service magic hookData. Circle's hosted relayer watches
+// The forwarded flag on stellarDepositForBurn switches the burn to
+// deposit_for_burn_with_hook with this magic hookData. Circle's relayer watches
 // source chains for this magic and auto-completes the destination mint,
 // deducting its fee from the minted USDC, so the user pays no destination gas.
 //
@@ -206,45 +41,6 @@ export function encodeCctpForwardHookData(): Uint8Array {
     const out = new Uint8Array(32);
     out.set(new TextEncoder().encode(CCTP_FORWARD_MAGIC), 0);
     return out;
-}
-
-export async function depositForBurnWithHookForwarded(args: {
-    caller: string;
-    amount: bigint; // Stellar 7-decimal subunits
-    destinationDomain: number;
-    mintRecipient: Uint8Array; // pre-encoded 32-byte recipient
-    maxFee: bigint;
-    finalityThreshold: number;
-}): Promise<{ hash: string; sourceDomain: number }> {
-    const account = await stellarRpc.getAccount(args.caller);
-
-    const mintRecipient = args.mintRecipient;
-    const destinationCaller = ZERO_BYTES_32;
-    const hookData = encodeCctpForwardHookData();
-
-    const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            tmm.call(
-                'deposit_for_burn_with_hook',
-                Address.fromString(args.caller).toScVal(),
-                nativeToScVal(args.amount, { type: 'i128' }),
-                nativeToScVal(args.destinationDomain, { type: 'u32' }),
-                bytesN32(mintRecipient),
-                Address.fromString(STELLAR.contracts.usdc).toScVal(),
-                bytesN32(destinationCaller),
-                nativeToScVal(args.maxFee, { type: 'i128' }),
-                nativeToScVal(args.finalityThreshold, { type: 'u32' }),
-                nativeToScVal(hookData, { type: 'bytes' }),
-            ),
-        )
-        .setTimeout(60)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
-    return { hash, sourceDomain: STELLAR.domain };
 }
 
 // Inbound from EVM: mint_and_forward is permissionless (no caller arg).
@@ -352,8 +148,6 @@ export function leftPad32FromHex(hex: `0x${string}`): Uint8Array {
     }
     return bytes;
 }
-
-const ZERO_BYTES_32 = new Uint8Array(32);
 
 function bytesN32(bytes: Uint8Array): xdr.ScVal {
     if (bytes.length !== 32) throw new Error(`bytesN32 expects 32 bytes, got ${bytes.length}`);

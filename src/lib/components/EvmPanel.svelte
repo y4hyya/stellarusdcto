@@ -11,7 +11,7 @@
     } from '$lib/evm/wallet';
     import { formatEvmUsdc, getEvmUsdcBalance } from '$lib/evm/usdc';
     import { fetchSendCallsCapability, type SendCallsCapability } from '$lib/evm/capabilities';
-    import { EVM_CHAINS, type Direction, type EvmChainId, type InboundFlow } from '$lib/config';
+    import { EVM_CHAINS, type EvmChainId, type InboundFlow } from '$lib/config';
     import { shortAddr } from '$lib/utils';
 
     let {
@@ -22,14 +22,14 @@
         // EvmBurnPreview can read it too; refreshed here on connect / chain
         // switch via explicit dataflow.
         sendCallsCap = $bindable<SendCallsCapability>({ supported: false, atomic: false }),
-        direction,
+        evmIsSource,
         disabled = false,
     }: {
         wallet?: EvmWallet | null;
         chainId?: EvmChainId;
         inboundFlow?: InboundFlow;
         sendCallsCap?: SendCallsCapability;
-        direction: Direction;
+        evmIsSource: boolean;
         disabled?: boolean;
     } = $props();
 
@@ -41,7 +41,6 @@
 
     let selectedCfg = $derived(EVM_CHAINS[chainId]);
     let onCorrectChain = $derived(!!wallet && wallet.chainId === selectedCfg.chain.id);
-    let wrapperAvailable = $derived(!!selectedCfg.bridgeWrapper);
     let sendCallsAvailable = $derived(sendCallsCap.supported);
 
     onMount(async () => {
@@ -145,11 +144,6 @@
             return;
         }
         chainId = id;
-        // If switching to a chain without a deployed wrapper, drop back to
-        // two-tx so the user doesn't submit with a flow this chain can't run.
-        if (!EVM_CHAINS[id].bridgeWrapper && inboundFlow === 'wrapper') {
-            inboundFlow = 'two-tx';
-        }
         if (wallet) {
             await switchChain();
         } else {
@@ -229,7 +223,7 @@
         {#if connectError}<p class="error">{connectError}</p>{/if}
     {/if}
 
-    {#if direction === 'evm-to-stellar'}
+    {#if evmIsSource}
         <div class="flow-picker" role="tablist" aria-label="EVM inbound flow">
             <span class="flow-label">Inbound flow</span>
             <div class="flow-buttons">
@@ -244,20 +238,6 @@
                     title="Sign approve, then sign depositForBurnWithHook separately"
                 >
                     2 tx (direct)
-                </button>
-                <button
-                    type="button"
-                    class="chip"
-                    class:active={inboundFlow === 'wrapper'}
-                    disabled={disabled || !wrapperAvailable}
-                    onclick={() => (inboundFlow = 'wrapper')}
-                    role="tab"
-                    aria-selected={inboundFlow === 'wrapper'}
-                    title={wrapperAvailable
-                        ? 'One tx via CctpWrapper: sign an EIP-2612 permit, then submit one transaction'
-                        : 'No CctpWrapper deployed on this chain (set bridgeWrapper in config.ts)'}
-                >
-                    1 tx (permit)
                 </button>
                 <button
                     type="button"

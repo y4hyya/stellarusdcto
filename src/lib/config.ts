@@ -17,11 +17,7 @@ export const STELLAR = {
     rpcUrl: stellar.rpcUrls[0],
     domain: stellar.domain,
     explorer: stellar.explorer,
-    contracts: {
-        ...stellar.contracts,
-        // Demo era wrapper contract, on its way out with the wrapper flows.
-        bridgeWrapper: 'CCR6VA3W3R3O23MEKY64J5ABIKB5MUTQYN5NVY4VE7FIZT7OTOELS5AE',
-    },
+    contracts: stellar.contracts,
     usdc: { code: stellar.usdc.code, issuer: stellar.usdc.issuer, decimals: 7 },
 } as const;
 
@@ -56,13 +52,6 @@ export type EvmChainConfig = {
     usdcDecimals: number;
     gasNote: string;
     attestationEtaMs?: number;
-    bridgeWrapper?: `0x${string}`;
-};
-
-// Demo era wrapper contract addresses, on their way out with the wrapper flows.
-const WRAPPERS: Partial<Record<EvmChainId, `0x${string}`>> = {
-    arc: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd',
-    base: '0xe87b2FCD2675f49785B46f5e84E1019961637eBd',
 };
 
 export const EVM_CHAINS = Object.fromEntries(
@@ -78,7 +67,6 @@ export const EVM_CHAINS = Object.fromEntries(
             usdcDecimals: 6,
             gasNote: entry.gasNote,
             attestationEtaMs: entry.attestationEtaMs,
-            bridgeWrapper: WRAPPERS[entry.id as EvmChainId],
         } satisfies EvmChainConfig,
     ]),
 ) as Record<EvmChainId, EvmChainConfig>;
@@ -125,10 +113,8 @@ export type Direction =
 // The right side chain in the main page selector: an EVM chain or Solana.
 export type RightChain = EvmChainId | 'solana';
 
-// Transaction shape pickers from the demo era. The wrapper values are being
-// removed with the wrapper flows.
-export type OutboundFlow = 'wrapper' | 'two-tx';
-export const DEFAULT_OUTBOUND_FLOW: OutboundFlow = 'two-tx';
-export const DEFAULT_FORWARDING = false;
-export type InboundFlow = 'wrapper' | 'two-tx' | 'send-calls';
+// Whether a burn from an EVM source lets the wallet bundle approve + burn
+// behind one confirmation (EIP-5792) or runs them as two transactions.
+export type InboundFlow = 'two-tx' | 'send-calls';
 export const DEFAULT_INBOUND_FLOW: InboundFlow = 'two-tx';
+export const DEFAULT_FORWARDING = false;

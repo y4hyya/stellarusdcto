@@ -2,13 +2,8 @@
     import { tick } from 'svelte';
     import EvmPanel from './EvmPanel.svelte';
     import SolanaPanel from './SolanaPanel.svelte';
-    import {
-        EVM_CHAINS,
-        type Direction,
-        type EvmChainId,
-        type InboundFlow,
-        type RightChain,
-    } from '$lib/config';
+    import { listChains } from '$lib/registry';
+    import { type EvmChainId, type InboundFlow, type RightChain } from '$lib/config';
     import type { EvmWallet } from '$lib/evm/wallet';
     import type { SendCallsCapability } from '$lib/evm/capabilities';
     import type { SolanaWallet } from '$lib/solana/wallet';
@@ -20,7 +15,7 @@
         solanaWallet = $bindable<SolanaWallet | null>(null),
         inboundFlow = $bindable<InboundFlow>('two-tx'),
         sendCallsCap = $bindable<SendCallsCapability>({ supported: false, atomic: false }),
-        direction,
+        stellarIsSource,
         disabled = false,
     }: {
         chain?: RightChain;
@@ -29,7 +24,7 @@
         solanaWallet?: SolanaWallet | null;
         inboundFlow?: InboundFlow;
         sendCallsCap?: SendCallsCapability;
-        direction: Direction;
+        stellarIsSource: boolean;
         disabled?: boolean;
     } = $props();
 
@@ -63,30 +58,19 @@
 
 <section class="dest">
     <div class="chain-picker" role="tablist" aria-label="Destination chain">
-        {#each Object.values(EVM_CHAINS) as cfg (cfg.id)}
+        {#each listChains() as entry (entry.id)}
             <button
                 type="button"
                 class="chip"
-                class:active={chain === cfg.id}
+                class:active={chain === entry.id}
                 {disabled}
-                onclick={() => pick(cfg.id)}
+                onclick={() => pick(entry.id as RightChain)}
                 role="tab"
-                aria-selected={chain === cfg.id}
+                aria-selected={chain === entry.id}
             >
-                {cfg.label}
+                {entry.label}
             </button>
         {/each}
-        <button
-            type="button"
-            class="chip"
-            class:active={chain === 'solana'}
-            {disabled}
-            onclick={() => pick('solana')}
-            role="tab"
-            aria-selected={chain === 'solana'}
-        >
-            Solana
-        </button>
     </div>
 
     {#if chain === 'solana'}
@@ -98,7 +82,7 @@
             bind:chainId={evmChainId}
             bind:inboundFlow
             bind:sendCallsCap
-            {direction}
+            evmIsSource={!stellarIsSource}
             {disabled}
         />
     {/if}

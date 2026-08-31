@@ -2,7 +2,6 @@
     import { onMount } from 'svelte';
     import { connectFreighter, detectFreighter, type FreighterState } from '$lib/stellar/freighter';
     import { formatUsdc, getUsdcBalance } from '$lib/stellar/usdc';
-    import type { Direction, OutboundFlow } from '$lib/config';
     import { shortAddr } from '$lib/utils';
 
     let {
@@ -11,15 +10,13 @@
             address: null,
             networkPassphrase: null,
         }),
-        outboundFlow = $bindable<OutboundFlow>('two-tx'),
         forwarding = $bindable<boolean>(false),
-        direction,
+        stellarIsSource,
         disabled = false,
     }: {
         freighter?: FreighterState;
-        outboundFlow?: OutboundFlow;
         forwarding?: boolean;
-        direction: Direction;
+        stellarIsSource: boolean;
         disabled?: boolean;
     } = $props();
 
@@ -91,42 +88,14 @@
         {#if balanceError}<p class="error">{balanceError}</p>{/if}
     {/if}
 
-    {#if direction === 'stellar-to-evm' || direction === 'stellar-to-solana'}
-        <div class="flow-picker" role="tablist" aria-label="Outbound flow">
-            <span class="flow-label">Outbound flow</span>
-            <div class="flow-buttons">
-                <button
-                    type="button"
-                    class="chip"
-                    class:active={outboundFlow === 'two-tx'}
-                    {disabled}
-                    onclick={() => (outboundFlow = 'two-tx')}
-                    role="tab"
-                    aria-selected={outboundFlow === 'two-tx'}
-                    title="Sign approve, then sign deposit_for_burn separately"
-                >
-                    2 tx (direct)
-                </button>
-                <button
-                    type="button"
-                    class="chip"
-                    class:active={outboundFlow === 'wrapper'}
-                    {disabled}
-                    onclick={() => (outboundFlow = 'wrapper')}
-                    role="tab"
-                    aria-selected={outboundFlow === 'wrapper'}
-                    title="One Soroban tx via a wrapper contract, so you get a single Freighter prompt"
-                >
-                    1 tx (wrapper)
-                </button>
-            </div>
-
+    {#if stellarIsSource}
+        <div class="flow-picker">
             <div class="forwarding-row">
                 <span class="forwarding-text">
                     Circle forwarding ⚗︎
                     <span class="forwarding-sub">
-                        Tag the burn so Circle's relayer auto-mints on the destination (works with
-                        either flow above).
+                        Tag the burn so Circle's relayer auto-mints on the destination, so the
+                        recipient needs no gas there. The relayer's fee comes out of the USDC.
                     </span>
                 </span>
                 <button
@@ -255,41 +224,6 @@
         margin-top: auto;
         padding-top: 0.5rem;
         border-top: 1px solid var(--border);
-    }
-
-    .flow-label {
-        font-size: 0.7rem;
-        color: var(--text-dim);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-    }
-
-    .flow-buttons {
-        display: flex;
-        gap: 0.4rem;
-    }
-
-    .chip {
-        flex: 1;
-        background: var(--bg-elev-2);
-        color: var(--text-muted);
-        border: 1px solid var(--border);
-        padding: 0.4rem 0.6rem;
-        border-radius: var(--radius);
-        font-size: 0.78rem;
-        font-weight: 500;
-        transition: all 120ms;
-    }
-
-    .chip:hover:not(:disabled) {
-        color: var(--text);
-        border-color: var(--border-strong);
-    }
-
-    .chip.active {
-        background: var(--accent-dim);
-        color: var(--text);
-        border-color: var(--accent);
     }
 
     .forwarding-row {

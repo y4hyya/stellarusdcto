@@ -6,7 +6,6 @@
         STELLAR,
         STELLAR_MAX_FEE,
         type EvmChainId,
-        type OutboundFlow,
         type TransferSpeed,
     } from '$lib/config';
     import {
@@ -33,7 +32,6 @@
         evmChainId,
         solanaRecipient,
         amount,
-        outboundFlow,
         forwarding,
         speed,
     }: {
@@ -42,7 +40,6 @@
         evmChainId?: EvmChainId;
         solanaRecipient?: string;
         amount: string;
-        outboundFlow: OutboundFlow;
         forwarding: boolean;
         speed: TransferSpeed;
     } = $props();
@@ -76,26 +73,11 @@
     let feePromise = $derived(fetchBurnFee(STELLAR.domain, destDomain));
     let threshold = $derived(thresholdFor(speed));
 
-    // Wrapper + forwarding shapes apply to either destination (the wrapper burns
-    // to any domain; the forwarding hook is dest-agnostic).
-    let isWrapper = $derived(outboundFlow === 'wrapper');
     let isForwarding = $derived(forwarding);
 
-    let contractAddress = $derived(
-        isWrapper ? STELLAR.contracts.bridgeWrapper : STELLAR.contracts.tokenMessengerMinter,
-    );
-    let contractLabel = $derived(
-        isWrapper ? 'CctpWrapper (user-deployed)' : 'TokenMessengerMinter',
-    );
-    // Inner burn call the wrapper makes (also the auth-tree function name).
-    let innerBurnFn = $derived(isForwarding ? 'deposit_for_burn_with_hook' : 'deposit_for_burn');
-    let functionName = $derived(
-        isWrapper
-            ? isForwarding
-                ? 'approve_and_deposit_with_hook'
-                : 'approve_and_deposit'
-            : innerBurnFn,
-    );
+    const contractAddress = STELLAR.contracts.tokenMessengerMinter;
+    const contractLabel = 'TokenMessengerMinter';
+    let functionName = $derived(isForwarding ? 'deposit_for_burn_with_hook' : 'deposit_for_burn');
 
     // Forwarding maxFee comes from the ?forward=true quote (protocol fee +
     // forwarding service fee), keyed by route (works for the Solana dest too).
@@ -190,18 +172,10 @@
         </div>
     </div>
 
-    {#if isWrapper}
-        <p class="flow-note">
-            Wrapper flow: one Soroban transaction, one Freighter prompt. Soroban's auth tree
-            authorizes both inner calls below (<code>approve</code> and <code>{innerBurnFn}</code>)
-            from that single signature.
-        </p>
-    {:else}
-        <p class="flow-note">
-            Two-transaction flow: a separate <code>usdc.approve(...)</code> goes first, and it's skipped
-            when your existing allowance already covers the amount.
-        </p>
-    {/if}
+    <p class="flow-note">
+        A separate <code>usdc.approve(...)</code> goes first, and it's skipped when your existing allowance
+        already covers the amount.
+    </p>
     {#if isForwarding}
         <p class="flow-note">
             Forwarding is on, so the <code>hook_data</code> below tags this burn for Circle's forwarding
@@ -212,19 +186,6 @@
 
     <h5 class="section-title">Arguments</h5>
     <ul class="rows">
-        {#if isWrapper}
-            <ContractArg
-                name="tmm"
-                type="Address"
-                value={STELLAR.contracts.tokenMessengerMinter}
-                truncate
-            >
-                {#snippet note()}
-                    TokenMessengerMinter, the CCTP contract the wrapper calls on your behalf.
-                {/snippet}
-            </ContractArg>
-        {/if}
-
         <ContractArg name="caller" type="Address" value={stellarAddress} truncate>
             {#snippet note()}
                 Your address, and the one the USDC is burned from. The contract calls
@@ -263,13 +224,13 @@
             />
         {/await}
 
-        <ContractArg name="burn_token" type="Address" value={STELLAR.contracts.usdc} truncate>
-            {#snippet note()}
-                Stellar USDC SAC.{#if isWrapper}
-                    The wrapper hands this same address to the inner <code>approve</code> and to the burn.
-                {/if}
-            {/snippet}
-        </ContractArg>
+        <ContractArg
+            name="burn_token"
+            type="Address"
+            value={STELLAR.contracts.usdc}
+            note="Stellar USDC SAC."
+            truncate
+        />
 
         <ContractArg name="destination_caller" type="BytesN<32>" value={ZERO_BYTES_32_HEX} hex>
             {#snippet note()}
@@ -302,138 +263,6 @@
             </ContractArg>
         {/if}
     </ul>
-
-    {#if isWrapper}
-        <details class="auth-tree" open>
-            <summary>Auth tree (one signature, two authorized inner calls)</summary>
-            <ol class="auth-list">
-                <li class="auth-call">
-                    <div class="auth-head">
-                        <code class="auth-target" title={STELLAR.contracts.usdc}>
-                            {shortAddr(STELLAR.contracts.usdc)}
-                        </code>
-                        <span class="auth-dot">·</span>
-                        <code class="auth-fn">approve</code>
-                    </div>
-                    <ul class="auth-args">
-                        <ContractArg
-                            name="from"
-                            type="Address"
-                            value={stellarAddress}
-                            note="caller"
-                            truncate
-                        />
-                        <ContractArg
-                            name="spender"
-                            type="Address"
-                            value={STELLAR.contracts.tokenMessengerMinter}
-                            note="tmm"
-                            truncate
-                        />
-                        <ContractArg
-                            name="amount"
-                            type="i128"
-                            {...amountArg}
-                            note={parsedAmount.ok
-                                ? `${formatUsdc(parsedAmount.raw)} USDC`
-                                : undefined}
-                        />
-                        <ContractArg
-                            name="live_until_ledger"
-                            type="u32"
-                            placeholder="computed in-contract: (sequence + 50).next_multiple_of(50)"
-                        />
-                    </ul>
-                </li>
-
-                <li class="auth-call">
-                    <div class="auth-head">
-                        <code class="auth-target" title={STELLAR.contracts.tokenMessengerMinter}>
-                            {shortAddr(STELLAR.contracts.tokenMessengerMinter)}
-                        </code>
-                        <span class="auth-dot">·</span>
-                        <code class="auth-fn">{innerBurnFn}</code>
-                    </div>
-                    <ul class="auth-args">
-                        <ContractArg name="caller" type="Address" value={stellarAddress} truncate />
-                        <ContractArg
-                            name="amount"
-                            type="i128"
-                            {...amountArg}
-                            note={parsedAmount.ok
-                                ? `${formatUsdc(parsedAmount.raw)} USDC`
-                                : undefined}
-                        />
-                        <ContractArg
-                            name="destination_domain"
-                            type="u32"
-                            value={destDomain.toString()}
-                            note={toSolana ? 'Solana' : chain?.label}
-                        />
-                        {#await mintRecipientValue}
-                            <ContractArg
-                                name="mint_recipient"
-                                type="BytesN<32>"
-                                placeholder="Deriving your USDC ATA..."
-                            />
-                        {:then value}
-                            <ContractArg
-                                name="mint_recipient"
-                                type="BytesN<32>"
-                                {value}
-                                hex
-                                note={toSolana ? '→ your Solana USDC ATA' : `→ ${evmRecipient}`}
-                            />
-                        {:catch}
-                            <ContractArg
-                                name="mint_recipient"
-                                type="BytesN<32>"
-                                placeholder="Invalid Solana recipient."
-                            />
-                        {/await}
-                        <ContractArg
-                            name="burn_token"
-                            type="Address"
-                            value={STELLAR.contracts.usdc}
-                            note="Stellar USDC SAC."
-                            truncate
-                        />
-                        <ContractArg
-                            name="destination_caller"
-                            type="BytesN<32>"
-                            value={ZERO_BYTES_32_HEX}
-                            note="open"
-                            hex
-                        />
-                        {#await maxFeeArg}
-                            <ContractArg
-                                name="max_fee"
-                                type="i128"
-                                placeholder="Calculating maximum fee..."
-                            />
-                        {:then { value }}
-                            <ContractArg name="max_fee" type="i128" {value} />
-                        {/await}
-                        <ContractArg
-                            name="min_finality_threshold"
-                            type="u32"
-                            value={threshold.toString()}
-                            note={speed === 'fast' ? 'fast' : 'finalized'}
-                        />
-                        {#if isForwarding}
-                            <ContractArg
-                                name="hook_data"
-                                type="Bytes"
-                                value={hookDataHex}
-                                note={`the ascii "${CCTP_FORWARD_MAGIC}" magic`}
-                                hex
-                            />
-                        {/if}
-                    </ul>
-                </li>
-            </ol>
-        </details>
-    {/if}
 </section>
 
 <style>
@@ -531,92 +360,5 @@
         display: flex;
         flex-direction: column;
         gap: 0.4rem;
-    }
-
-    .auth-tree {
-        margin-top: 0.25rem;
-        background: var(--bg);
-        border-radius: var(--radius);
-        padding: 0.5rem 0.6rem;
-        border-left: 2px solid var(--accent);
-    }
-
-    .auth-tree summary {
-        cursor: pointer;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--text);
-        list-style: none;
-    }
-
-    .auth-tree summary::-webkit-details-marker {
-        display: none;
-    }
-
-    .auth-tree summary::before {
-        content: '▸';
-        display: inline-block;
-        width: 1em;
-        color: var(--text-muted);
-        transition: transform 120ms;
-    }
-
-    .auth-tree[open] summary::before {
-        transform: rotate(90deg);
-    }
-
-    .auth-list {
-        list-style: none;
-        margin: 0.5rem 0 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    .auth-call {
-        border-left: 2px solid var(--border-strong);
-        padding: 0.3rem 0 0.3rem 0.6rem;
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-    }
-
-    .auth-head {
-        display: flex;
-        align-items: baseline;
-        gap: 0.4rem;
-        flex-wrap: wrap;
-    }
-
-    .auth-target {
-        font-family: var(--mono);
-        font-size: 0.78rem;
-        color: var(--text-muted);
-    }
-
-    .auth-dot {
-        color: var(--text-dim);
-    }
-
-    .auth-fn {
-        font-family: var(--mono);
-        font-size: 0.78rem;
-        color: var(--text);
-        font-weight: 600;
-    }
-
-    .auth-args {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.25rem;
-
-        --arg-gap: 0.25rem 0.5rem;
-        --arg-pad: 0.25rem 0.4rem;
-        --arg-bg: var(--bg-elev-2);
-        --arg-rule: none;
     }
 </style>

@@ -1,63 +1,23 @@
 <script lang="ts">
-    import type { Direction } from '$lib/config';
+    import { classifyHash } from '$lib/engine/core';
 
     let {
-        direction,
-        bothConnected,
         disabled,
         onResume,
     }: {
-        direction: Direction;
-        bothConnected: boolean;
         disabled: boolean;
         onResume: (burnHash: string) => void;
     } = $props();
 
     let burnHash = $state('');
-
     let trimmed = $derived(burnHash.trim());
-
-    // Which chain the burn happened on, derived from the page-level direction.
-    // Drives the validation hint + placeholder.
-    let source = $derived<'stellar' | 'evm' | 'solana'>(
-        direction === 'stellar-to-evm' || direction === 'stellar-to-solana'
-            ? 'stellar'
-            : direction === 'solana-to-stellar'
-              ? 'solana'
-              : 'evm',
+    let classified = $derived(trimmed === '' ? null : classifyHash(trimmed));
+    let formatError = $derived(
+        trimmed !== '' && classified === null
+            ? 'That does not look like a transaction hash from a supported chain.'
+            : null,
     );
-
-    // Format checks are intentionally light. Stellar tx hashes are 64 hex chars
-    // (no 0x), EVM tx hashes are 0x + 64 hex, Solana signatures are base58 (~88
-    // chars). Iris rejects anything it doesn't recognize when polling, so this is
-    // an early-warning signal, not a security boundary.
-    let formatError = $derived.by(() => {
-        if (trimmed === '') return null;
-        if (source === 'stellar') {
-            if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-                return 'Expected a 64-character hex Stellar tx hash (no 0x prefix).';
-            }
-        } else if (source === 'solana') {
-            if (!/^[1-9A-HJ-NP-Za-km-z]{80,90}$/.test(trimmed)) {
-                return 'Expected a base58 Solana transaction signature.';
-            }
-        } else {
-            if (!/^0x[0-9a-fA-F]{64}$/.test(trimmed)) {
-                return 'Expected a 0x-prefixed 66-character EVM tx hash.';
-            }
-        }
-        return null;
-    });
-
-    let placeholder = $derived(
-        source === 'stellar'
-            ? '64-char Stellar tx hash (e.g. a1b2…)'
-            : source === 'solana'
-              ? 'base58 Solana signature (e.g. 5Yw…)'
-              : '0x-prefixed EVM tx hash (e.g. 0xa1b2…)',
-    );
-
-    let canResume = $derived(trimmed !== '' && bothConnected && !disabled && formatError === null);
+    let canResume = $derived(classified !== null && !disabled);
 
     function submit() {
         if (!canResume) return;
@@ -69,10 +29,10 @@
     <summary>Resume a transfer by burn hash</summary>
     <div class="body">
         <p class="blurb">
-            If a previous transfer's tab closed while it was waiting on attestation, paste the burn
-            transaction hash here and we'll pick things back up at attest and mint. This works for
-            any transfer with a known hash and a matching source domain, since minting is
-            permissionless.
+            Paste the burn transaction hash of any interrupted CCTP transfer, from this site or any
+            other tool, and it gets picked back up at the attestation and completed. The source
+            chain is detected from the hash automatically, and minting is permissionless, so only
+            the receiving side's wallet needs to be connected.
         </p>
         <label class="hash-row">
             <span class="label">Burn hash</span>
@@ -83,7 +43,7 @@
                 autocapitalize="off"
                 autocorrect="off"
                 autocomplete="off"
-                {placeholder}
+                placeholder="0x…, 64 hex chars, or a base58 signature"
                 bind:value={burnHash}
                 {disabled}
             />
@@ -94,9 +54,6 @@
         <button type="button" class="submit" disabled={!canResume} onclick={submit}>
             Resume
         </button>
-        {#if !bothConnected}
-            <p class="hint">Connect both wallets to resume a transfer.</p>
-        {/if}
     </div>
 </details>
 
@@ -193,12 +150,5 @@
     .submit:disabled {
         background: var(--bg-elev);
         color: var(--text-dim);
-    }
-
-    .hint {
-        margin: 0;
-        text-align: center;
-        color: var(--text-dim);
-        font-size: 0.8rem;
     }
 </style>

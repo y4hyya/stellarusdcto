@@ -1,36 +1,7 @@
-import { erc20Abi, formatUnits, hexToNumber, parseUnits, slice, type Hex } from 'viem';
+import { erc20Abi, formatUnits, parseUnits } from 'viem';
 import { EVM_CHAINS, type EvmChainId } from '$lib/config';
 import { getPublicClient } from './client';
 import type { EvmWallet } from './wallet';
-
-// EIP-2612 permit-specific reads on USDC. Circle's FiatTokenV2_2 (and Arc's
-// USDC proxy) expose `nonces`, `version`, and the standard `name` / `permit`.
-// We query name + version dynamically so the EIP-712 domain matches whatever
-// the chain actually deployed. Guessing "USD Coin" vs "USDC" is a common
-// source of "invalid signature" reverts.
-const usdcPermitAbi = [
-    {
-        type: 'function',
-        name: 'name',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ type: 'string' }],
-    },
-    {
-        type: 'function',
-        name: 'version',
-        stateMutability: 'view',
-        inputs: [],
-        outputs: [{ type: 'string' }],
-    },
-    {
-        type: 'function',
-        name: 'nonces',
-        stateMutability: 'view',
-        inputs: [{ name: 'owner', type: 'address' }],
-        outputs: [{ type: 'uint256' }],
-    },
-] as const;
 
 export async function getEvmUsdcBalance(chainId: EvmChainId, addr: `0x${string}`): Promise<bigint> {
     const cfg = EVM_CHAINS[chainId];
@@ -73,94 +44,6 @@ export async function approveEvmUsdc(args: {
     });
     await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
     return hash;
-}
-
-export type EvmUsdcPermitSignature = {
-    deadline: bigint;
-    v: number;
-    r: Hex;
-    s: Hex;
-};
-
-// The four fields that go into the EIP-712 domain when signing a `Permit`
-// message. `name` and `version` come from the USDC contract itself (they
-// vary by deployment, typically "USDC"/"2" but worth reading rather than
-// guessing); `chainId` and `verifyingContract` are static per chain.
-export type EvmUsdcEip712Domain = {
-    name: string;
-    version: string;
-    chainId: number;
-    verifyingContract: `0x${string}`;
-};
-
-// Reads USDC's `name()` and `version()` at runtime. Both values are
-// effectively immutable for a deployed FiatToken proxy, but we query
-// them rather than hardcode, because a mismatched name/version produces the
-// notoriously opaque "EIP2612: invalid signature" revert.
-export async function fetchUsdcEip712Domain(chainId: EvmChainId): Promise<EvmUsdcEip712Domain> {
-    const cfg = EVM_CHAINS[chainId];
-    const pub = getPublicClient(chainId);
-    const [name, version] = await Promise.all([
-        pub.readContract({ address: cfg.usdc, abi: usdcPermitAbi, functionName: 'name' }),
-        pub.readContract({ address: cfg.usdc, abi: usdcPermitAbi, functionName: 'version' }),
-    ]);
-    return { name, version, chainId: cfg.chain.id, verifyingContract: cfg.usdc };
-}
-
-// Produces an EIP-2612 permit signature authorizing `spender` to pull `value`
-// USDC from `wallet.address`. The signature is single-use (consumes a nonce)
-// and expires at `deadline`. No on-chain tx is sent; the wrapper contract
-// calls `usdc.permit(...)` with these values in the same tx as the burn.
-export async function signEvmUsdcPermit(args: {
-    chainId: EvmChainId;
-    wallet: EvmWallet;
-    spender: `0x${string}`;
-    value: bigint;
-    deadlineSeconds?: number; // default 30 min
-}): Promise<EvmUsdcPermitSignature> {
-    const cfg = EVM_CHAINS[args.chainId];
-    const pub = getPublicClient(args.chainId);
-
-    const [domain, nonce] = await Promise.all([
-        fetchUsdcEip712Domain(args.chainId),
-        pub.readContract({
-            address: cfg.usdc,
-            abi: usdcPermitAbi,
-            functionName: 'nonces',
-            args: [args.wallet.address],
-        }),
-    ]);
-
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + (args.deadlineSeconds ?? 30 * 60));
-
-    const signature = (await args.wallet.walletClient.signTypedData({
-        account: args.wallet.address,
-        domain,
-        types: {
-            Permit: [
-                { name: 'owner', type: 'address' },
-                { name: 'spender', type: 'address' },
-                { name: 'value', type: 'uint256' },
-                { name: 'nonce', type: 'uint256' },
-                { name: 'deadline', type: 'uint256' },
-            ],
-        },
-        primaryType: 'Permit',
-        message: {
-            owner: args.wallet.address,
-            spender: args.spender,
-            value: args.value,
-            nonce,
-            deadline,
-        },
-    })) as Hex;
-
-    // Split 65-byte sig into r (32) | s (32) | v (1). viem's signature is the
-    // canonical ecrecover layout, so v is the last byte and already 27/28.
-    const r = slice(signature, 0, 32);
-    const s = slice(signature, 32, 64);
-    const v = hexToNumber(slice(signature, 64, 65));
-    return { deadline, v, r, s };
 }
 
 export function formatEvmUsdc(chainId: EvmChainId, raw: bigint): string {

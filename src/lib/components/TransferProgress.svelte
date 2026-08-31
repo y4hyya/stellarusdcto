@@ -1,10 +1,10 @@
 <script lang="ts">
     import { onDestroy } from 'svelte';
-    import { EVM_CHAINS } from '$lib/config';
+    import { getChain } from '$lib/registry';
     import { shortAddr } from '$lib/utils';
-    import type { TransferState } from '$lib/stores/transfer.svelte';
+    import type { EngineState } from '$lib/engine/transfer.svelte';
 
-    let { transfer }: { transfer: TransferState } = $props();
+    let { transfer }: { transfer: EngineState } = $props();
 
     // Drive a 1s tick so elapsed timers update without depending on the store.
     let now = $state(Date.now());
@@ -13,16 +13,18 @@
 
     // Only Standard transfers wait on source finality. Fast Transfer attests
     // before it, so the chain's finality ETA copy would be plain wrong there.
-    let longWaitEtaMs = $derived(
-        transfer.direction === 'evm-to-stellar' &&
-            transfer.evmChainId &&
-            transfer.speed === 'standard'
-            ? EVM_CHAINS[transfer.evmChainId].attestationEtaMs
-            : undefined,
+    // The aside is only worth showing for waits long enough to worry a user.
+    let sourceEntry = $derived(
+        transfer.sourceId === 'stellar' ? null : getChain(transfer.sourceId),
     );
-    let longWaitChainLabel = $derived(
-        transfer.evmChainId ? EVM_CHAINS[transfer.evmChainId].label : '',
-    );
+    let longWaitEtaMs = $derived.by(() => {
+        const eta = sourceEntry?.attestationEtaMs;
+        if (transfer.speed !== 'standard' || eta === undefined || eta < 5 * 60_000) {
+            return undefined;
+        }
+        return eta;
+    });
+    let longWaitChainLabel = $derived(sourceEntry?.label ?? '');
 
     function fmtElapsed(s: { startedAt?: number; endedAt?: number }): string | null {
         if (!s.startedAt) return null;
@@ -144,7 +146,8 @@
                             <span class="long-wait-sub">
                                 Circle's attesters are waiting for {longWaitChainLabel}'s batch to
                                 settle and reach finality on its parent chain. Leaving this tab open
-                                is fine, but don't refresh it.
+                                is fine, and the burn hash is saved here, so even a closed tab can
+                                be resumed later.
                             </span>
                             <span class="long-wait-eta"
                                 >{fmtRemaining(step.startedAt, longWaitEtaMs)}</span
@@ -192,7 +195,20 @@
     </ol>
 
     {#if transfer.error}
-        <div class="error">{transfer.error}</div>
+        <div class="error">
+            <p class="error-message">{transfer.error.userMessage}</p>
+            <p class="error-action">{transfer.error.action}</p>
+            {#if transfer.error.raw !== undefined}
+                <details class="error-raw">
+                    <summary>technical details</summary>
+                    <code
+                        >{transfer.error.raw instanceof Error
+                            ? transfer.error.raw.message
+                            : String(transfer.error.raw)}</code
+                    >
+                </details>
+            {/if}
+        </div>
     {/if}
 
     {#if transfer.phase === 'done'}
@@ -329,9 +345,44 @@
         border-radius: var(--radius);
         padding: 0.75rem;
         color: var(--error);
-        font-size: 0.85rem;
-        font-family: var(--mono);
+        font-size: 0.9rem;
         word-break: break-word;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
+
+    .error-message {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .error-action {
+        margin: 0;
+        color: var(--text);
+        font-size: 0.85rem;
+    }
+
+    .error-raw {
+        font-size: 0.8rem;
+    }
+
+    .error-raw > summary {
+        cursor: pointer;
+        color: var(--text-muted);
+        list-style: revert;
+    }
+
+    .error-raw code {
+        display: block;
+        margin-top: 0.35rem;
+        padding: 0.5rem;
+        background: var(--bg);
+        border-radius: var(--radius);
+        font-family: var(--mono);
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        word-break: break-all;
     }
 
     .success {

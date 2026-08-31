@@ -10,12 +10,7 @@
     } from '$lib/config';
     import { fetchBurnFee, feeBpsFor, thresholdFor, computeMaxFee } from '$lib/circle/fees';
     import { encodeStellarForwarderHookData, strkeyToBytes32 } from '$lib/stellar/recipient';
-    import {
-        fetchUsdcEip712Domain,
-        formatEvmUsdc,
-        parseEvmUsdc,
-        type EvmUsdcEip712Domain,
-    } from '$lib/evm/usdc';
+    import { formatEvmUsdc, parseEvmUsdc } from '$lib/evm/usdc';
     import type { SendCallsCapability } from '$lib/evm/capabilities';
     import { shortAddr } from '$lib/utils';
     import ContractArg from '$lib/components/ui/ContractArg.svelte';
@@ -81,33 +76,14 @@
         })(),
     );
 
-    let isWrapper = $derived(inboundFlow === 'wrapper');
     let isSendCalls = $derived(inboundFlow === 'send-calls');
 
-    let contractAddress = $derived(
-        isWrapper ? cfg.bridgeWrapper : EVM_CCTP_CONTRACTS.tokenMessengerV2,
-    );
-    let contractLabel = $derived(isWrapper ? 'CctpWrapper (user-deployed)' : 'TokenMessengerV2');
-    let functionName = $derived(isWrapper ? 'bridgeWithPermit' : 'depositForBurnWithHook');
+    const contractAddress = EVM_CCTP_CONTRACTS.tokenMessengerV2;
+    const contractLabel = 'TokenMessengerV2';
+    const functionName = 'depositForBurnWithHook';
 
-    // Memoized EIP-712 domain fetch per chain. The (name, version) pair is
-    // immutable for a deployed FiatToken proxy so we read once per chain and
-    // share across instances. Re-runs only when evmChainId changes (the
-    // {#await} block in the template keys on the returned Promise identity).
-    // Plain object cache to keep this non-reactive. Svelte's SvelteMap would
-    // also work but adds reactivity we don't need for a pure memo.
-    const domainCache: Partial<Record<EvmChainId, Promise<EvmUsdcEip712Domain>>> = {};
-    function getDomain(chainId: EvmChainId): Promise<EvmUsdcEip712Domain> {
-        let p = domainCache[chainId];
-        if (!p) {
-            p = fetchUsdcEip712Domain(chainId);
-            domainCache[chainId] = p;
-        }
-        return p;
-    }
-
-    // Row props for the amount, which appears three times with different notes:
-    // the burn argument, the permit `value`, and the bundled `approve` amount.
+    // Row props for the amount, which appears twice with different notes:
+    // the burn argument and the bundled `approve` amount.
     let amountArg = $derived(
         parsedAmount.ok
             ? {
@@ -163,9 +139,7 @@
     <div class="meta">
         <div class="meta-row">
             <span class="meta-label">Contract</span>
-            <code class="meta-value" title={contractAddress ?? ''}>
-                {contractAddress ? shortAddr(contractAddress) : 'n/a'}
-            </code>
+            <code class="meta-value" title={contractAddress}>{shortAddr(contractAddress)}</code>
             <span class="meta-aside">{contractLabel}</span>
         </div>
         <div class="meta-row">
@@ -176,19 +150,12 @@
             <span class="meta-label">Caller</span>
             <code class="meta-value" title={evmAddress}>{shortAddr(evmAddress)}</code>
             <span class="meta-aside">
-                The <code>msg.sender</code>. Your EVM wallet pays the gas, and in the wrapper flow
-                it is also the permit <code>owner</code>.
+                The <code>msg.sender</code>. Your EVM wallet pays the gas.
             </span>
         </div>
     </div>
 
-    {#if isWrapper}
-        <p class="flow-note">
-            Wrapper flow: one EIP-712 signature (off-chain, so no gas) plus one transaction. The
-            wrapper runs <code>usdc.permit → transferFrom → approve → depositForBurnWithHook</code>
-            atomically.
-        </p>
-    {:else if isSendCalls}
+    {#if isSendCalls}
         <p class="flow-note">
             Batched flow: the wallet bundles <code>usdc.approve(...)</code> and
             <code>depositForBurnWithHook(...)</code> behind one confirmation using EIP-5792's
@@ -208,84 +175,6 @@
             Two-transaction flow: a separate <code>usdc.approve(...)</code> goes first, and it's skipped
             when your existing allowance already covers the amount.
         </p>
-    {/if}
-
-    {#if isWrapper}
-        <details class="signed-block" open>
-            <summary>EIP-712 permit signature (off-chain, so no gas)</summary>
-            <div class="signed-body">
-                <h6 class="block-section">Domain</h6>
-                {#await getDomain(evmChainId)}
-                    <p class="loading">Reading USDC name + version…</p>
-                {:then domain}
-                    <ul class="rows tight">
-                        <ContractArg
-                            name="name"
-                            type="string"
-                            value={`"${domain.name}"`}
-                            note="read from usdc.name()"
-                        />
-                        <ContractArg
-                            name="version"
-                            type="string"
-                            value={`"${domain.version}"`}
-                            note="read from usdc.version()"
-                        />
-                        <ContractArg
-                            name="chainId"
-                            type="uint256"
-                            value={domain.chainId.toString()}
-                            note={cfg.label}
-                        />
-                        <ContractArg
-                            name="verifyingContract"
-                            type="address"
-                            value={domain.verifyingContract}
-                            note={`USDC on ${cfg.label}`}
-                            truncate
-                        />
-                    </ul>
-                {:catch err}
-                    <p class="error">Couldn't read USDC domain: {err.message}</p>
-                {/await}
-
-                <h6 class="block-section">Permit message</h6>
-                <ul class="rows tight">
-                    <ContractArg
-                        name="owner"
-                        type="address"
-                        value={evmAddress}
-                        note="caller"
-                        truncate
-                    />
-                    <ContractArg
-                        name="spender"
-                        type="address"
-                        value={cfg.bridgeWrapper ?? 'n/a'}
-                        note="CctpWrapper"
-                        truncate={!!cfg.bridgeWrapper}
-                    />
-                    <ContractArg
-                        name="value"
-                        type="uint256"
-                        {...amountArg}
-                        note={parsedAmount.ok
-                            ? `same as the burn amount (${formatEvmUsdc(evmChainId, parsedAmount.raw)} USDC)`
-                            : undefined}
-                    />
-                    <ContractArg
-                        name="nonce"
-                        type="uint256"
-                        placeholder="read at sign time from usdc.nonces(owner)"
-                    />
-                    <ContractArg
-                        name="deadline"
-                        type="uint256"
-                        placeholder="set at sign time to now + 30 min"
-                    />
-                </ul>
-            </div>
-        </details>
     {/if}
 
     {#if isSendCalls}
@@ -352,9 +241,7 @@
         </details>
     {/if}
 
-    <h5 class="section-title">
-        {isWrapper ? 'bridgeWithPermit arguments' : 'depositForBurnWithHook arguments'}
-    </h5>
+    <h5 class="section-title">depositForBurnWithHook arguments</h5>
     <ul class="rows">
         <ContractArg name="amount" type="uint256" {...amountArg} />
 
@@ -373,15 +260,13 @@
             hex
         />
 
-        {#if !isWrapper}
-            <ContractArg
-                name="burnToken"
-                type="address"
-                value={cfg.usdc}
-                note={`USDC on ${cfg.label}`}
-                truncate
-            />
-        {/if}
+        <ContractArg
+            name="burnToken"
+            type="address"
+            value={cfg.usdc}
+            note={`USDC on ${cfg.label}`}
+            truncate
+        />
 
         <ContractArg name="destinationCaller" type="bytes32" value={forwarderBytes32} hex>
             {#snippet note()}
@@ -406,25 +291,6 @@
         />
 
         <ContractArg name="hookData" type="bytes" hex {...hookDataArg} />
-
-        {#if isWrapper}
-            <ContractArg
-                name="permitDeadline"
-                type="uint256"
-                placeholder="set at sign time to now + 30 min"
-            />
-            <ContractArg name="permitV" type="uint8" placeholder="27 or 28 (ECDSA recovery id)" />
-            <ContractArg
-                name="permitR"
-                type="bytes32"
-                placeholder="first 32 bytes of the signature"
-            />
-            <ContractArg
-                name="permitS"
-                type="bytes32"
-                placeholder="middle 32 bytes of the signature"
-            />
-        {/if}
     </ul>
 </section>
 
@@ -586,35 +452,11 @@
         margin-top: 0.5rem;
     }
 
-    .block-section {
-        margin: 0.25rem 0 0;
-        font-size: 0.7rem;
-        font-weight: 600;
-        color: var(--text-dim);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-
     .block-blurb {
         margin: 0;
         font-size: 0.78rem;
         color: var(--text-muted);
         line-height: 1.4;
-    }
-
-    .loading {
-        margin: 0;
-        font-size: 0.78rem;
-        color: var(--text-dim);
-        font-style: italic;
-    }
-
-    .error {
-        margin: 0;
-        color: var(--error);
-        font-size: 0.8rem;
-        font-family: var(--mono);
-        word-break: break-word;
     }
 
     .badge {
