@@ -26,5 +26,7 @@ vite.config.ts.timestamp-*
 target
 **/test_snapshots
 
-# Claude
+# Local working notes, never published
 /.claude
+CLAUDE.md
+/notes
