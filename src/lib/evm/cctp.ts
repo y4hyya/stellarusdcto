@@ -104,7 +104,7 @@ export async function evmBurnToTarget(args: {
         functionName: 'depositForBurnWithHook',
         args: burnArgs,
     });
-    await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
+    await waitForSuccess(args.chainId, hash, 'Burn');
     return hash;
 }
 
@@ -152,7 +152,21 @@ export async function evmSendCallsBurnToTarget(args: {
     if (!burn?.transactionHash) {
         throw new Error('No burn receipt returned from wallet_sendCalls');
     }
+    if (burn.status === 'reverted') {
+        throw new Error(`Burn transaction reverted on chain: ${burn.transactionHash}`);
+    }
     return burn.transactionHash;
+}
+
+// viem's receipt wait resolves for REVERTED transactions too. Every wait in
+// this app goes through here so a failed transaction fails the step instead
+// of being treated as a success (a reverted burn once sat in the journal as
+// "waiting for attestation" for a burn that never happened).
+async function waitForSuccess(chainId: EvmChainId, hash: `0x${string}`, what: string) {
+    const receipt = await getPublicClient(chainId).waitForTransactionReceipt({ hash });
+    if (receipt.status === 'reverted') {
+        throw new Error(`${what} transaction reverted on chain: ${hash}`);
+    }
 }
 
 // Rescue forensics: when Circle has no record of a hash, find the raw
@@ -225,6 +239,6 @@ export async function receiveMessageOnEvm(args: {
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],
     });
-    await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
+    await waitForSuccess(args.chainId, hash, 'Mint');
     return hash;
 }

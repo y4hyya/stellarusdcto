@@ -42,7 +42,10 @@ export async function approveEvmUsdc(args: {
         functionName: 'approve',
         args: [args.spender, args.amount],
     });
-    await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
+    const receipt = await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
+    if (receipt.status === 'reverted') {
+        throw new Error(`Approve transaction reverted on chain: ${hash}`);
+    }
     return hash;
 }
 
