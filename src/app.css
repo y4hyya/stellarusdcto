@@ -14,7 +14,7 @@
        after hours. Panels stay opaque enough that the halftone art gives
        atmosphere at the edges, never noise behind the numbers. */
     --bg: light-dark(rgba(255, 253, 250, 0.55), rgba(12, 8, 6, 0.55));
-    --bg-elev: light-dark(rgba(248, 244, 239, 0.88), rgba(19, 13, 11, 0.78));
+    --bg-elev: light-dark(rgba(248, 244, 239, 0.78), rgba(19, 13, 11, 0.68));
     --bg-elev-2: light-dark(rgba(255, 255, 255, 0.62), rgba(255, 245, 235, 0.07));
     --border: light-dark(rgba(24, 16, 12, 0.14), rgba(255, 240, 228, 0.13));
     --border-strong: light-dark(rgba(24, 16, 12, 0.3), rgba(255, 240, 228, 0.26));
