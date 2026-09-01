@@ -20,6 +20,8 @@ export type TransferErrorCode =
     | 'AMOUNT_INVALID'
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
+    | 'BURN_REVERTED'
+    | 'TX_NOT_A_BURN'
     | 'HASH_INVALID'
     | 'WALLET_REQUIRED'
     | 'CONFIG_MISSING'
@@ -115,6 +117,17 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
     RECIPIENT_INVALID: {
         userMessage: 'The recipient address is not valid for the destination chain.',
         action: 'Paste the full address again and check the chain it belongs to.',
+        retryable: true,
+    },
+    BURN_REVERTED: {
+        userMessage:
+            'This transaction ran but failed on chain. Nothing was burned, the USDC never left the sending wallet.',
+        action: 'Check the wallet balance, lower the amount a little (leave room for gas), and send again.',
+        retryable: false,
+    },
+    TX_NOT_A_BURN: {
+        userMessage: 'This transaction exists but Circle has no burn recorded for it.',
+        action: 'If it just happened, wait a minute and retry. Otherwise it may not be a CCTP burn at all, an approval for example. Paste the burn transaction hash.',
         retryable: true,
     },
     HASH_INVALID: {

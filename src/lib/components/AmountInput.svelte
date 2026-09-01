@@ -4,15 +4,20 @@
     let {
         amount = $bindable(''),
         balance6,
+        maxReserve6 = 0n,
         disabled = false,
     }: {
         amount?: string;
         balance6: bigint | null;
+        /** Held back from Max on chains whose gas token is USDC. */
+        maxReserve6?: bigint;
         disabled?: boolean;
     } = $props();
 
     function useMax() {
-        if (balance6 !== null) amount = formatUsdc(balance6);
+        if (balance6 === null) return;
+        const spendable = balance6 - maxReserve6;
+        amount = formatUsdc(spendable > 0n ? spendable : 0n);
     }
 </script>
 

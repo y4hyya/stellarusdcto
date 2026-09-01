@@ -69,6 +69,16 @@
               ? 'Connect wallet'
               : 'Connect Phantom',
     );
+    // On chains whose gas token IS USDC (Arc), a burn of the full balance
+    // reverts on chain because gas comes out of the same pool. Hold back a
+    // little from Max and from the send gate.
+    let gasReserve6 = $derived(
+        !stellarIsSource &&
+            rightEntry.family === 'evm' &&
+            rightEntry.chain.nativeCurrency.symbol === 'USDC'
+            ? 50_000n
+            : 0n,
+    );
     let sourceBalance6 = $derived(
         sourceFamily === 'stellar'
             ? stellarWallet.balance6
@@ -130,6 +140,7 @@
             amountError: parsed.error,
             amount6: parsed.amount6,
             balance6: sourceBalance6,
+            gasReserve6,
             recipientState: recipientStatus.kind,
             recipientProblem: recipientStatus.problem?.userMessage ?? null,
             destLabel: destFamily === 'stellar' ? 'Stellar' : rightEntry.label,
@@ -221,7 +232,12 @@
                     <ChainSelect value={rightChain} onSelect={pickChain} disabled={busy} />
                 {/if}
                 <div class="grow">
-                    <AmountInput bind:amount balance6={sourceBalance6} disabled={busy} />
+                    <AmountInput
+                        bind:amount
+                        balance6={sourceBalance6}
+                        maxReserve6={gasReserve6}
+                        disabled={busy}
+                    />
                 </div>
             </div>
             {#if wrongNetwork}

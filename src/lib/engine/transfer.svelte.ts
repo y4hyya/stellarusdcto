@@ -26,7 +26,12 @@ import {
 import { fetchAttestation, pollAttestation, type IrisMessage } from '$lib/circle/iris';
 import { mintAndForward, stellarDepositForBurn } from '$lib/stellar/cctp';
 import { approveUsdc, getUsdcAllowance } from '$lib/stellar/usdc';
-import { evmBurnToTarget, evmSendCallsBurnToTarget, receiveMessageOnEvm } from '$lib/evm/cctp';
+import {
+    evmBurnToTarget,
+    evmSendCallsBurnToTarget,
+    findEvmReceipt,
+    receiveMessageOnEvm,
+} from '$lib/evm/cctp';
 import { approveEvmUsdc, getEvmUsdcAllowance, getEvmUsdcBalance } from '$lib/evm/usdc';
 import { solanaBurnToTarget } from '$lib/solana/cctp';
 import { receiveMessageOnSolana } from '$lib/solana/mint';
@@ -583,6 +588,33 @@ export function createTransferEngine(initialSourceId: string, initialDestId: str
             }
         }
         if (!found) {
+            // Circle knows nothing. For an EVM shaped hash, look for the raw
+            // transaction itself: a reverted receipt means nothing was ever
+            // burned, and that honest answer beats a shrug.
+            if (classified.kind === 'evm') {
+                const receipt = await findEvmReceipt(
+                    classified.normalized as `0x${string}`,
+                    getRegistry().chains.filter((c) => c.family === 'evm'),
+                ).catch(() => null);
+                if (receipt?.reverted) {
+                    fail(
+                        new TransferError('BURN_REVERTED', {
+                            userMessage: `This transaction ran on ${receipt.label} but failed on chain. Nothing was burned, the USDC never left the sending wallet.`,
+                            raw: args.burnHash,
+                        }),
+                    );
+                    return;
+                }
+                if (receipt) {
+                    fail(
+                        new TransferError('TX_NOT_A_BURN', {
+                            userMessage: `This transaction exists on ${receipt.label}, but Circle has no burn recorded for it.`,
+                            raw: args.burnHash,
+                        }),
+                    );
+                    return;
+                }
+            }
             fail(
                 new TransferError('HASH_INVALID', {
                     userMessage: 'Circle has no record of this burn yet on any supported chain.',

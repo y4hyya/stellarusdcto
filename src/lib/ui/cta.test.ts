@@ -52,6 +52,28 @@ describe('resolveCta', () => {
         expect(resolveCta({ ...base, balance6: null }).kind).toBe('send');
     });
 
+    test('chains that pay gas in USDC keep a reserve out of the max', () => {
+        // Balance 100, gas reserve 0.05: 100 is affordable in USDC terms but
+        // would leave nothing for gas, so the button explains instead of
+        // letting the burn revert on chain.
+        const gasEats = resolveCta({
+            ...base,
+            amount6: 100_000_000n,
+            balance6: 100_000_000n,
+            gasReserve6: 50_000n,
+        });
+        expect(gasEats.kind).toBe('insufficient');
+        expect(gasEats.label).toBe('Leave a little USDC for gas');
+        expect(
+            resolveCta({
+                ...base,
+                amount6: 99_900_000n,
+                balance6: 100_000_000n,
+                gasReserve6: 50_000n,
+            }).kind,
+        ).toBe('send');
+    });
+
     test('recipient states gate the send', () => {
         expect(resolveCta({ ...base, recipientState: 'empty' }).kind).toBe('enter-recipient');
         expect(resolveCta({ ...base, recipientState: 'invalid' }).kind).toBe('fix-recipient');

@@ -16,6 +16,12 @@ export type CtaInput = {
     amount6: bigint | null;
     /** Source balance in 6 decimal units; null while unknown (never blocks). */
     balance6: bigint | null;
+    /**
+     * USDC held back for gas on chains whose gas token IS USDC (Arc): a burn
+     * of the full balance would revert on chain, so the ladder blocks it with
+     * an explanation instead. Omit or 0 elsewhere.
+     */
+    gasReserve6?: bigint;
     recipientState: 'empty' | 'invalid' | 'checking' | 'problem' | 'ok';
     /** Short plain label when recipientState is 'problem'. */
     recipientProblem: string | null;
@@ -60,6 +66,9 @@ export function resolveCta(input: CtaInput): Cta {
     }
     if (input.balance6 !== null && input.amount6 > input.balance6) {
         return { kind: 'insufficient', label: 'Not enough USDC', enabled: false };
+    }
+    if (input.balance6 !== null && input.amount6 > input.balance6 - (input.gasReserve6 ?? 0n)) {
+        return { kind: 'insufficient', label: 'Leave a little USDC for gas', enabled: false };
     }
     if (input.recipientState === 'empty') {
         return { kind: 'enter-recipient', label: 'Enter a recipient', enabled: false };

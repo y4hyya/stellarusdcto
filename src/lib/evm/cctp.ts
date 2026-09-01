@@ -155,6 +155,26 @@ export async function evmSendCallsBurnToTarget(args: {
     return burn.transactionHash;
 }
 
+// Rescue forensics: when Circle has no record of a hash, find the raw
+// transaction on any EVM chain in the registry. A reverted receipt means
+// nothing was ever burned, which is the honest answer a stuck user needs.
+export async function findEvmReceipt(
+    hash: Hex,
+    entries: Array<{ id: string; label: string }>,
+): Promise<{ id: string; label: string; reverted: boolean } | null> {
+    const probes = entries.map(async (entry) => {
+        const receipt = await getPublicClient(entry.id as EvmChainId).getTransactionReceipt({
+            hash,
+        });
+        return { id: entry.id, label: entry.label, reverted: receipt.status === 'reverted' };
+    });
+    const settled = await Promise.allSettled(probes);
+    for (const result of settled) {
+        if (result.status === 'fulfilled') return result.value;
+    }
+    return null;
+}
+
 // Whether a CCTP nonce was already consumed on this chain. The public
 // usedNonces mapping is the free pre mint check and the post mint proof;
 // Iris status never says minted.
