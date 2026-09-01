@@ -1,6 +1,9 @@
 <script lang="ts">
+    import { assets } from '$app/paths';
     import { listChains } from '$lib/registry';
     import type { ChainEntry } from '$lib/registry';
+
+    const icon = (id: string) => `${assets}/chains/${id}.svg`;
 
     let {
         value,
@@ -32,7 +35,7 @@
 </script>
 
 <button type="button" class="trigger" onclick={open} {disabled} aria-haspopup="dialog">
-    <span class="dot" style:--chain-accent={selected?.accent ?? 'var(--accent)'}></span>
+    <img class="coin" src={icon(value)} alt="" width="20" height="20" />
     <span class="label">{selected?.label ?? value}</span>
     <span class="caret" aria-hidden="true">▾</span>
 </button>
@@ -59,7 +62,7 @@
                     class:current={entry.id === value}
                     onclick={() => pick(entry)}
                 >
-                    <span class="dot big" style:--chain-accent={entry.accent}></span>
+                    <img class="coin big" src={icon(entry.id)} alt="" width="24" height="24" />
                     <span class="option-label">{entry.label}</span>
                     <span class="option-meta">domain {entry.domain}</span>
                 </button>
@@ -93,17 +96,23 @@
         opacity: 0.55;
     }
 
-    .dot {
-        width: 10px;
-        height: 10px;
+    /* A white coin plate keeps dark brand glyphs (Linea, Cronos) visible on
+       smoke glass and unifies the mixed logo shapes. */
+    .coin {
+        width: 20px;
+        height: 20px;
+        padding: 2px;
         border-radius: 999px;
-        background: var(--chain-accent);
+        background: #ffffff;
+        border: 1px solid var(--border);
+        object-fit: contain;
         flex: none;
     }
 
-    .dot.big {
-        width: 14px;
-        height: 14px;
+    .coin.big {
+        width: 24px;
+        height: 24px;
+        padding: 2.5px;
     }
 
     .caret {

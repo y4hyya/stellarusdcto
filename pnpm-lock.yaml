@@ -63,6 +63,9 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.13.3
+      '@web3icons/core':
+        specifier: ^4.0.55
+        version: 4.0.55
       codama:
         specifier: ^1.10.0
         version: 1.10.0
@@ -1183,6 +1186,12 @@ packages:
   '@wallet-standard/base@1.1.1':
     resolution: {integrity: sha512-gggIHTtxicF9XFMQ12DkfS6NAG92Ak795JeSA7f2whAQ6Y3AkMWWuCMxSZXG2NIPN42kEaZSNVjqMsJRaJRxMQ==}
     engines: {node: '>=22'}
+
+  '@web3icons/common@0.11.50':
+    resolution: {integrity: sha512-mq3Pv4Paq5ikNRR7Yg5ywhLTuQZeseyaGPuAVEUCph+ssn7J6SWPRf8Ze3T2T7TVXy2YpljmVONasBs0+NKX2w==}
+
+  '@web3icons/core@4.0.55':
+    resolution: {integrity: sha512-Gab1lPKU4ckmWhcXylwokBav1jz+49NIVEukLwY2NOzZLbyi9rB3ppPixKwLUkhhNXQDQaycJ9wBTpxkCeVc2w==}
 
   abitype@1.2.3:
     resolution: {integrity: sha512-Ofer5QUnuUdTFsBRwARMoWKOH1ND5ehwYhJ3OJ/BQO+StkwQjHw0XyVh4vDttzHB7QOFhPHa/o413PJ82gU/Tg==}
@@ -3304,6 +3313,12 @@ snapshots:
       '@wallet-standard/base': 1.1.1
 
   '@wallet-standard/base@1.1.1': {}
+
+  '@web3icons/common@0.11.50': {}
+
+  '@web3icons/core@4.0.55':
+    dependencies:
+      '@web3icons/common': 0.11.50
 
   abitype@1.2.3(typescript@6.0.3):
     optionalDependencies:

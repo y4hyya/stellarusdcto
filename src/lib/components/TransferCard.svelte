@@ -16,6 +16,7 @@
     import { resolveCta } from '$lib/ui/cta';
     import { evmWallet, solanaWallet, stellarWallet } from '$lib/ui/wallets.svelte';
     import { shortAddr } from '$lib/utils';
+    import { assets } from '$app/paths';
     import type { EvmChainId } from '$lib/config';
 
     let { onSettled }: { onSettled?: () => void } = $props();
@@ -227,7 +228,16 @@
             </div>
             <div class="side-row">
                 {#if stellarIsSource}
-                    <span class="fixed-chain"><span class="dot stellar"></span>Stellar</span>
+                    <span class="fixed-chain">
+                        <img
+                            class="coin"
+                            src={`${assets}/chains/stellar.svg`}
+                            alt=""
+                            width="20"
+                            height="20"
+                        />
+                        Stellar
+                    </span>
                 {:else}
                     <ChainSelect value={rightChain} onSelect={pickChain} disabled={busy} />
                 {/if}
@@ -276,7 +286,16 @@
                 {#if stellarIsSource}
                     <ChainSelect value={rightChain} onSelect={pickChain} disabled={busy} />
                 {:else}
-                    <span class="fixed-chain"><span class="dot stellar"></span>Stellar</span>
+                    <span class="fixed-chain">
+                        <img
+                            class="coin"
+                            src={`${assets}/chains/stellar.svg`}
+                            alt=""
+                            width="20"
+                            height="20"
+                        />
+                        Stellar
+                    </span>
                 {/if}
                 <div class="grow">
                     <RecipientRow
@@ -475,15 +494,15 @@
         white-space: nowrap;
     }
 
-    .dot {
-        width: 10px;
-        height: 10px;
+    .coin {
+        width: 20px;
+        height: 20px;
+        padding: 2px;
         border-radius: 999px;
+        background: #ffffff;
+        border: 1px solid var(--border);
+        object-fit: contain;
         flex: none;
-    }
-
-    .dot.stellar {
-        background: var(--stellar);
     }
 
     .swap-rail {
