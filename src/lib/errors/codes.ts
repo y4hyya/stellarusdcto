@@ -20,6 +20,7 @@ export type TransferErrorCode =
     | 'AMOUNT_INVALID'
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
+    | 'STELLAR_TX_EXPIRED'
     | 'BURN_REVERTED'
     | 'TX_NOT_A_BURN'
     | 'HASH_INVALID'
@@ -117,6 +118,12 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
     RECIPIENT_INVALID: {
         userMessage: 'The recipient address is not valid for the destination chain.',
         action: 'Paste the full address again and check the chain it belongs to.',
+        retryable: true,
+    },
+    STELLAR_TX_EXPIRED: {
+        userMessage:
+            'The Stellar network was busy and this transaction expired before it was included. Nothing left the wallet.',
+        action: 'Try again. The expired transaction can never execute later, so retrying cannot double send.',
         retryable: true,
     },
     BURN_REVERTED: {

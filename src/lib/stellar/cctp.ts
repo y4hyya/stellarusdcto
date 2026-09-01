@@ -11,6 +11,7 @@ import {
 import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
 import { simulateSignAndSubmit } from './tx';
+import { inclusionFee } from './fees';
 
 const tmm = new Contract(STELLAR.contracts.tokenMessengerMinter);
 const forwarder = new Contract(STELLAR.contracts.cctpForwarder);
@@ -53,7 +54,7 @@ export async function mintAndForward(args: {
     const account = await stellarRpc.getAccount(args.caller);
 
     const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
+        fee: await inclusionFee(),
         networkPassphrase: STELLAR.networkPassphrase,
     })
         .addOperation(
@@ -63,7 +64,7 @@ export async function mintAndForward(args: {
                 nativeToScVal(args.attestation, { type: 'bytes' }),
             ),
         )
-        .setTimeout(60)
+        .setTimeout(180)
         .build();
 
     const hash = await simulateSignAndSubmit(tx);
@@ -104,11 +105,11 @@ export async function stellarDepositForBurn(args: {
         : tmm.call('deposit_for_burn', ...common);
 
     const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
+        fee: await inclusionFee(),
         networkPassphrase: STELLAR.networkPassphrase,
     })
         .addOperation(operation)
-        .setTimeout(60)
+        .setTimeout(180)
         .build();
 
     const hash = await simulateSignAndSubmit(tx);

@@ -1,5 +1,6 @@
 import { TransactionBuilder, rpc } from '@stellar/stellar-sdk';
 import { STELLAR } from '$lib/config';
+import { TransferError } from '$lib/errors/codes';
 import { sleep } from '$lib/utils';
 import { stellarRpc } from './client';
 import { signXdr } from './freighter';
@@ -25,6 +26,18 @@ export async function signAndSubmitClassic(
     return signAndSubmit(tx);
 }
 
+/**
+ * How long to poll for a submitted transaction, in epoch ms: until its own
+ * timebound passes plus a grace window for the closing ledger to propagate.
+ * Once that deadline expires the network can never include the transaction,
+ * which is what makes "safe to retry" a guarantee rather than a hope.
+ */
+export function pollDeadline(maxTime: string | undefined, now: number): number {
+    const bound = Number(maxTime ?? 0);
+    if (!bound) return now + 90_000;
+    return Math.max(bound * 1000, now) + 15_000;
+}
+
 async function signAndSubmit(tx: ReturnType<TransactionBuilder['build']>): Promise<string> {
     const signedXdr = await signXdr(tx.toXDR());
     const signed = TransactionBuilder.fromXDR(signedXdr, STELLAR.networkPassphrase);
@@ -34,8 +47,11 @@ async function signAndSubmit(tx: ReturnType<TransactionBuilder['build']>): Promi
         throw new Error(`Submission rejected: ${JSON.stringify(send.errorResult)}`);
     }
 
-    let attempts = 0;
-    while (attempts++ < 60) {
+    const deadline = pollDeadline(
+        'timeBounds' in signed ? signed.timeBounds?.maxTime : undefined,
+        Date.now(),
+    );
+    while (Date.now() < deadline) {
         const got = await stellarRpc.getTransaction(send.hash);
         if (got.status === 'SUCCESS') return send.hash;
         if (got.status === 'FAILED') {
@@ -43,5 +59,5 @@ async function signAndSubmit(tx: ReturnType<TransactionBuilder['build']>): Promi
         }
         await sleep(1000);
     }
-    throw new Error(`Transaction did not finalize within 60s: ${send.hash}`);
+    throw new TransferError('STELLAR_TX_EXPIRED', { raw: `expired unsubmitted: ${send.hash}` });
 }

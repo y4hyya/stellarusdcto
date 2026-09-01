@@ -12,6 +12,7 @@ import {
 import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
 import { signAndSubmitClassic, simulateSignAndSubmit } from './tx';
+import { inclusionFee } from './fees';
 
 const usdc = new Contract(STELLAR.contracts.usdc);
 
@@ -74,7 +75,7 @@ export async function approveUsdc(args: {
     const expiration = latest.sequence + 1000;
 
     const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
+        fee: await inclusionFee(),
         networkPassphrase: STELLAR.networkPassphrase,
     })
         .addOperation(
@@ -86,7 +87,7 @@ export async function approveUsdc(args: {
                 nativeToScVal(expiration, { type: 'u32' }),
             ),
         )
-        .setTimeout(60)
+        .setTimeout(180)
         .build();
 
     return simulateSignAndSubmit(tx);
@@ -120,7 +121,7 @@ export function parseUsdcStellar(value: string): bigint {
 export async function addUsdcTrustline(caller: string): Promise<string> {
     const account = await stellarRpc.getAccount(caller);
     const tx = new TransactionBuilder(account, {
-        fee: BASE_FEE,
+        fee: await inclusionFee(),
         networkPassphrase: STELLAR.networkPassphrase,
     })
         .addOperation(
@@ -128,7 +129,7 @@ export async function addUsdcTrustline(caller: string): Promise<string> {
                 asset: new Asset(STELLAR.usdc.code, STELLAR.usdc.issuer),
             }),
         )
-        .setTimeout(60)
+        .setTimeout(180)
         .build();
     return signAndSubmitClassic(tx);
 }
