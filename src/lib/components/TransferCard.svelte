@@ -61,7 +61,10 @@
               : solanaWallet.state.wallet !== null,
     );
     let wrongNetwork = $derived(
-        sourceFamily === 'evm' && evmWallet.state.wallet !== null && !evmWallet.onSelectedNetwork,
+        (sourceFamily === 'evm' &&
+            evmWallet.state.wallet !== null &&
+            !evmWallet.onSelectedNetwork) ||
+            (sourceFamily === 'stellar' && stellarWallet.wrongNetwork),
     );
     let connectLabel = $derived(
         sourceFamily === 'stellar'
@@ -162,7 +165,12 @@
 
     async function ctaClick() {
         if (cta.kind === 'connect-source') return connectSource();
-        if (cta.kind === 'switch-network') return void evmWallet.switchNetwork();
+        if (cta.kind === 'switch-network') {
+            // EVM wallets can be switched programmatically; Freighter's
+            // network lives in the extension, so a click just re reads it.
+            if (sourceFamily === 'evm') return void evmWallet.switchNetwork();
+            return void stellarWallet.connect();
+        }
         if (cta.kind !== 'send') return;
         await engine.start({
             sourceId,
@@ -212,7 +220,15 @@
                 {#if sourceConnected && sourceAddress}
                     <span class="wallet">
                         <code title={sourceAddress}>{shortAddr(sourceAddress)}</code>
-                        {#if sourceFamily === 'evm'}
+                        {#if sourceFamily === 'stellar'}
+                            <button
+                                class="mini"
+                                title="Ask Freighter for access again, e.g. after switching account or network"
+                                onclick={() => void stellarWallet.connect()}
+                            >
+                                reconnect
+                            </button>
+                        {:else if sourceFamily === 'evm'}
                             <button class="mini" onclick={() => void evmWallet.disconnect()}>
                                 disconnect
                             </button>
@@ -250,11 +266,19 @@
                     />
                 </div>
             </div>
-            {#if wrongNetwork}
+            {#if wrongNetwork && sourceFamily === 'evm'}
                 <p class="inline-warn">
                     Your wallet is on a different network.
                     <button class="mini" onclick={() => void evmWallet.switchNetwork()}>
                         Switch to {rightEntry.label}
+                    </button>
+                </p>
+            {:else if wrongNetwork && sourceFamily === 'stellar'}
+                <p class="inline-warn">
+                    Freighter is on a different Stellar network than this app. Switch the network
+                    inside the Freighter extension, then
+                    <button class="mini" onclick={() => void stellarWallet.connect()}>
+                        reconnect
                     </button>
                 </p>
             {/if}

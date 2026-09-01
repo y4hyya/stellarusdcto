@@ -1,3 +1,4 @@
+import { stellarConfig } from '$lib/registry';
 import { connectFreighter, detectFreighter } from '$lib/stellar/freighter';
 import { getUsdcBalance as fetchStellarBalance } from '$lib/stellar/usdc';
 import {
@@ -38,6 +39,8 @@ const stellarState = $state({
     error: null as string | null,
     /** Raw Stellar balance in 7 decimal subunits. */
     balance7: null as bigint | null,
+    /** The network Freighter itself reports, to catch mismatches. */
+    passphrase: null as string | null,
     detected: false,
 });
 
@@ -48,6 +51,7 @@ async function stellarDetect() {
         const f = await detectFreighter();
         stellarState.installed = f.installed;
         stellarState.address = f.address;
+        stellarState.passphrase = f.networkPassphrase;
         if (f.address) await stellarRefresh();
     } catch {
         // Not installed: the connect button explains.
@@ -61,6 +65,7 @@ async function stellarConnect() {
         const f = await connectFreighter();
         stellarState.installed = f.installed;
         stellarState.address = f.address;
+        stellarState.passphrase = f.networkPassphrase;
         await stellarRefresh();
     } catch (err) {
         stellarState.error = message(err);
@@ -88,6 +93,14 @@ export const stellarWallet = {
     detect: stellarDetect,
     connect: stellarConnect,
     refresh: stellarRefresh,
+    /** Freighter is connected but sitting on a different Stellar network. */
+    get wrongNetwork(): boolean {
+        return (
+            stellarState.address !== null &&
+            stellarState.passphrase !== null &&
+            stellarState.passphrase !== stellarConfig().networkPassphrase
+        );
+    },
     /** Spendable balance floored to 6 decimal units (7th decimal dust stays). */
     get balance6(): bigint | null {
         return stellarState.balance7 === null ? null : stellarState.balance7 / 10n;
