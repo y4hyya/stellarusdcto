@@ -37,18 +37,8 @@
 <div class="wallpaper" aria-hidden="true"></div>
 
 <div class="shell">
-    <header class="top glass">
-        <a class="wordmark" href={resolve('/')}>
-            <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
-                <rect width="64" height="64" rx="14" fill="#2775CA" />
-                <path
-                    d="M32 13l4.6 14.4L51 32l-14.4 4.6L32 51l-4.6-14.4L13 32l14.4-4.6z"
-                    fill="#fff"
-                />
-            </svg>
-            stellarusdcto
-        </a>
-        <nav class="nav" aria-label="Main">
+    <header class="top">
+        <nav class="nav glass" aria-label="Main">
             <a class="nav-link" class:current={page.url.pathname === '/'} href={resolve('/')}
                 >Transfer</a
             >
@@ -61,10 +51,10 @@
             </a>
             <button class="nav-link as-button" onclick={() => history?.open()}>History</button>
         </nav>
-        <div class="top-right">
+        <div class="top-right glass">
             <span class="net-badge">Testnet</span>
             <button class="theme" onclick={toggleTheme} aria-label="Switch color theme">
-                <span class="theme-icon" aria-hidden="true">◐</span>
+                <span aria-hidden="true">◐</span>
             </button>
         </div>
     </header>
@@ -109,57 +99,36 @@
         flex-direction: column;
     }
 
+    /* Transparent positioning row: the pills are the only chrome. */
     .top {
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        gap: 1.25rem;
-        padding: 0.85rem 1.25rem;
-        border-left: none;
-        border-right: none;
-        border-top: none;
+        gap: 0.6rem;
+        padding: 0.9rem 1.25rem;
         position: sticky;
         top: 0;
         z-index: 20;
     }
 
-    .wordmark {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.55rem;
-        font-family: var(--mono);
-        font-size: 0.98rem;
-        font-weight: 500;
-        color: var(--text);
-        letter-spacing: -0.01em;
-        white-space: nowrap;
-    }
-
-    .wordmark:hover {
-        text-decoration: none;
-        color: var(--text);
-    }
-
-    .mark {
-        width: 22px;
-        height: 22px;
-        border-radius: 6px;
-    }
-
     .nav {
+        grid-column: 2;
         display: flex;
-        gap: 0.25rem;
-        margin-left: 0.25rem;
+        gap: 0.2rem;
+        padding: 0.3rem;
+        border-radius: 999px;
     }
 
     .nav-link {
         color: var(--text-muted);
         font-size: 0.88rem;
         font-weight: 500;
-        padding: 0.4rem 0.7rem;
-        border-radius: var(--radius);
-        min-height: 36px;
+        padding: 0.45rem 0.95rem;
+        border-radius: 999px;
+        min-height: 40px;
         display: inline-flex;
         align-items: center;
+        white-space: nowrap;
     }
 
     .nav-link:hover {
@@ -179,29 +148,29 @@
     }
 
     .top-right {
-        margin-left: auto;
+        grid-column: 3;
+        justify-self: end;
         display: flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: 0.45rem;
+        padding: 0.3rem 0.3rem 0.3rem 0.7rem;
+        border-radius: 999px;
     }
 
     .net-badge {
-        font-size: 0.7rem;
+        font-size: 0.68rem;
         font-weight: 600;
         letter-spacing: 0.07em;
         text-transform: uppercase;
         color: var(--warning);
-        background: var(--warning-dim);
-        border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
-        padding: 0.22rem 0.55rem;
-        border-radius: 999px;
+        white-space: nowrap;
     }
 
     .theme {
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
         border-radius: 999px;
-        background: none;
+        background: var(--bg-elev-2);
         border: 1px solid var(--border);
         color: var(--text-muted);
         display: inline-flex;
@@ -241,15 +210,23 @@
 
     @media (max-width: 560px) {
         .top {
-            gap: 0.6rem;
+            grid-template-columns: 1fr;
+            justify-items: center;
+            row-gap: 0.5rem;
             padding: 0.7rem 0.85rem;
-            flex-wrap: wrap;
         }
 
         .nav {
-            order: 3;
-            width: 100%;
-            justify-content: center;
+            grid-column: 1;
+        }
+
+        .top-right {
+            grid-column: 1;
+            justify-self: center;
+        }
+
+        .content {
+            padding: 1.5rem 0.9rem 2.5rem;
         }
     }
 </style>

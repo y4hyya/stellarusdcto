@@ -287,6 +287,16 @@
         font-family: var(--mono);
     }
 
+    @media (max-width: 560px) {
+        .hash-row {
+            flex-direction: column;
+        }
+
+        .go {
+            width: 100%;
+        }
+    }
+
     .again {
         align-self: center;
         -webkit-backdrop-filter: var(--glass-blur);

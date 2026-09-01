@@ -72,12 +72,18 @@
     box-sizing: border-box;
 }
 
-html,
+html {
+    background: #140d0a;
+}
+
+/* The body background MUST stay transparent: an opaque body background
+   paints above negative z-index descendants and would cover the fixed
+   wallpaper with a solid sheet (exactly the bug this comment prevents). */
 body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background: #140d0a;
+    background: transparent;
     color: var(--text);
     font-family: var(--sans);
     font-size: 15px;
@@ -85,8 +91,8 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
-/* The wallpaper: fixed behind everything, dimmed toward the bottom so the
-   scrolling content always has ground to stand on. */
+/* The wallpaper: fixed behind everything, gently dimmed toward the bottom
+   so scrolling content always has ground to stand on. */
 .wallpaper {
     position: fixed;
     inset: 0;
@@ -94,9 +100,9 @@ body {
     background:
         linear-gradient(
             180deg,
-            rgba(14, 8, 6, 0.22) 0%,
-            rgba(14, 8, 6, 0.62) 72%,
-            rgba(14, 8, 6, 0.8) 100%
+            rgba(14, 8, 6, 0.1) 0%,
+            rgba(14, 8, 6, 0.45) 70%,
+            rgba(14, 8, 6, 0.62) 100%
         ),
         url('/wallpaper.png') center / cover no-repeat,
         #140d0a;
