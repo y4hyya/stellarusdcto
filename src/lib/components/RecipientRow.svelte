@@ -9,7 +9,10 @@
 
 <script lang="ts">
     import { getChainAdapter, getStellarAdapter } from '$lib/adapters';
+    import { translateError } from '$lib/errors/translate';
     import { getChain } from '$lib/registry';
+    import { addUsdcTrustline } from '$lib/stellar/usdc';
+    import { stellarWallet } from '$lib/ui/wallets.svelte';
     import { shortAddr } from '$lib/utils';
 
     let {
@@ -49,9 +52,12 @@
     }
 
     // Live preflight, debounced. The check is per (destination, recipient,
-    // amount); a token guards against out of order answers.
+    // amount); a token guards against out of order answers. recheckNonce
+    // forces a fresh run after a fix (like adding the trustline) lands.
     let checkToken = 0;
+    let recheckNonce = $state(0);
     $effect(() => {
+        void recheckNonce;
         const value = recipient.trim();
         const dest = destId;
         const amount = amount6 ?? 0n;
@@ -87,6 +93,34 @@
         destId === 'stellar' ? 'Recipient can receive USDC' : 'Address format checks out',
     );
     let isSelf = $derived(!manual && autoAddress !== null && recipient === autoAddress);
+
+    // The one problem a button can fix: the connected wallet's own account is
+    // missing the official Circle USDC trustline. A trustline can only be
+    // added to your own account, so the button never shows for third parties.
+    let addingTrustline = $state(false);
+    let trustlineError = $state<string | null>(null);
+    let canFixTrustline = $derived(
+        destId === 'stellar' &&
+            status.kind === 'problem' &&
+            status.problem?.code === 'NO_TRUSTLINE' &&
+            autoAddress !== null &&
+            recipient.trim() === autoAddress,
+    );
+
+    async function fixTrustline() {
+        if (!canFixTrustline || addingTrustline) return;
+        addingTrustline = true;
+        trustlineError = null;
+        try {
+            await addUsdcTrustline(recipient.trim());
+            recheckNonce++;
+            void stellarWallet.refresh();
+        } catch (err) {
+            trustlineError = translateError(err, { family: 'stellar' }).userMessage;
+        } finally {
+            addingTrustline = false;
+        }
+    }
 </script>
 
 <div class="recipient" class:disabled>
@@ -137,7 +171,21 @@
             This does not look like a valid address for this chain.
         {:else if status.kind === 'problem' && status.problem}
             {status.problem.userMessage}
-            <span class="fix">{status.problem.action}</span>
+            {#if canFixTrustline}
+                <button
+                    type="button"
+                    class="fix-button"
+                    onclick={fixTrustline}
+                    disabled={addingTrustline || disabled}
+                >
+                    {addingTrustline ? 'Adding trustline…' : 'Add USDC trustline'}
+                </button>
+                {#if trustlineError}
+                    <span class="fix-error">{trustlineError}</span>
+                {/if}
+            {:else}
+                <span class="fix">{status.problem.action}</span>
+            {/if}
         {/if}
     </p>
 </div>
@@ -230,6 +278,34 @@
     .fix {
         display: block;
         color: var(--text-muted);
+    }
+
+    .fix-button {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 0.35rem;
+        min-height: 34px;
+        padding: 0.3rem 0.8rem;
+        background: var(--accent-strong);
+        color: var(--accent-contrast);
+        border: none;
+        border-radius: var(--radius);
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .fix-button:hover:not(:disabled) {
+        background: var(--accent-hover);
+    }
+
+    .fix-button:disabled {
+        opacity: 0.7;
+    }
+
+    .fix-error {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--error);
     }
 
     .disabled {

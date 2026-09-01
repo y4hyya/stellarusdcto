@@ -14,8 +14,19 @@ export async function simulateSignAndSubmit(
         throw new Error(`Soroban simulation failed: ${sim.error}`);
     }
     const prepared = rpc.assembleTransaction(tx, sim).build();
+    return signAndSubmit(prepared);
+}
 
-    const signedXdr = await signXdr(prepared.toXDR());
+// Classic operations (ChangeTrust and friends) never touch the Soroban
+// simulator: sign and submit directly.
+export async function signAndSubmitClassic(
+    tx: ReturnType<TransactionBuilder['build']>,
+): Promise<string> {
+    return signAndSubmit(tx);
+}
+
+async function signAndSubmit(tx: ReturnType<TransactionBuilder['build']>): Promise<string> {
+    const signedXdr = await signXdr(tx.toXDR());
     const signed = TransactionBuilder.fromXDR(signedXdr, STELLAR.networkPassphrase);
 
     const send = await stellarRpc.sendTransaction(signed);

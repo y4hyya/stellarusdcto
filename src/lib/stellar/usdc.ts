@@ -1,15 +1,17 @@
 import {
     Account,
     Address,
+    Asset,
     BASE_FEE,
     Contract,
+    Operation,
     TransactionBuilder,
     nativeToScVal,
     scValToNative,
 } from '@stellar/stellar-sdk';
 import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
-import { simulateSignAndSubmit } from './tx';
+import { signAndSubmitClassic, simulateSignAndSubmit } from './tx';
 
 const usdc = new Contract(STELLAR.contracts.usdc);
 
@@ -109,4 +111,24 @@ export function parseUsdcStellar(value: string): bigint {
     }
     const padded = frac.padEnd(STELLAR.usdc.decimals, '0');
     return BigInt(whole) * 10n ** BigInt(STELLAR.usdc.decimals) + BigInt(padded || '0');
+}
+
+// Adds the official Circle USDC trustline to the caller's OWN account, so a
+// first inbound transfer has somewhere to land. Classic ChangeTrust with no
+// limit argument, which means the maximum. Needs the account to exist and
+// carry the 0.5 XLM trustline reserve.
+export async function addUsdcTrustline(caller: string): Promise<string> {
+    const account = await stellarRpc.getAccount(caller);
+    const tx = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: STELLAR.networkPassphrase,
+    })
+        .addOperation(
+            Operation.changeTrust({
+                asset: new Asset(STELLAR.usdc.code, STELLAR.usdc.issuer),
+            }),
+        )
+        .setTimeout(60)
+        .build();
+    return signAndSubmitClassic(tx);
 }
