@@ -36,7 +36,7 @@ import { approveEvmUsdc, getEvmUsdcAllowance, getEvmUsdcBalance } from '$lib/evm
 import { solanaBurnToTarget } from '$lib/solana/cctp';
 import { receiveMessageOnSolana } from '$lib/solana/mint';
 import { getUsdcBalance as getSolanaUsdcBalance } from '$lib/solana/usdc';
-import type { EvmWallet } from '$lib/evm/wallet';
+import { ensureChain, type EvmWallet } from '$lib/evm/wallet';
 import type { SolanaWallet } from '$lib/solana/wallet';
 import { sleep } from '$lib/utils';
 import {
@@ -524,7 +524,13 @@ export function createTransferEngine(initialSourceId: string, initialDestId: str
                 return { result: r.hash, patch: { hash: r.hash, hashUrl: stellarTxUrl(r.hash) } };
             }
             if (dest.family === 'evm') {
-                const wallet = requireWallet(args.wallets.evm, 'evm wallet');
+                // The connected wallet may sit on any network (its last
+                // source chain, usually); the mint must run on the
+                // destination chain, so switch before signing.
+                const wallet = await ensureChain(
+                    requireWallet(args.wallets.evm, 'evm wallet'),
+                    dest.id as EvmChainId,
+                );
                 const hash = await receiveMessageOnEvm({
                     chainId: dest.id as EvmChainId,
                     wallet,

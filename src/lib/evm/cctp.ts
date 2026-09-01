@@ -1,5 +1,5 @@
 import { encodeFunctionData, erc20Abi, toHex, type Hex } from 'viem';
-import { EVM_CCTP_CONTRACTS, EVM_CHAINS, type EvmChainId } from '$lib/config';
+import { EVM_CHAINS, type EvmChainId } from '$lib/config';
 import { getPublicClient } from './client';
 import type { EvmWallet } from './wallet';
 
@@ -99,7 +99,7 @@ export async function evmBurnToTarget(args: {
     const hash = await args.wallet.walletClient.writeContract({
         account: args.wallet.address,
         chain: cfg.chain,
-        address: EVM_CCTP_CONTRACTS.tokenMessengerV2,
+        address: cfg.tokenMessenger,
         abi: tokenMessengerV2Abi,
         functionName: 'depositForBurnWithHook',
         args: burnArgs,
@@ -128,7 +128,7 @@ export async function evmSendCallsBurnToTarget(args: {
     const approveData = encodeFunctionData({
         abi: erc20Abi,
         functionName: 'approve',
-        args: [EVM_CCTP_CONTRACTS.tokenMessengerV2, args.amount],
+        args: [cfg.tokenMessenger, args.amount],
     });
     const burnData = encodeFunctionData({
         abi: tokenMessengerV2Abi,
@@ -140,7 +140,7 @@ export async function evmSendCallsBurnToTarget(args: {
         chain: cfg.chain,
         calls: [
             { to: cfg.usdc, data: approveData },
-            { to: EVM_CCTP_CONTRACTS.tokenMessengerV2, data: burnData },
+            { to: cfg.tokenMessenger, data: burnData },
         ],
     });
     const status = await args.wallet.walletClient.waitForCallsStatus({ id });
@@ -231,10 +231,21 @@ export async function receiveMessageOnEvm(args: {
     attestation: Hex;
 }): Promise<`0x${string}`> {
     const cfg = EVM_CHAINS[args.chainId];
+    // Simulate against our own pinned RPC before the wallet ever sees the
+    // transaction. When estimation fails inside a wallet it substitutes a
+    // huge fallback gas limit and still lets the user sign the doomed tx;
+    // failing here turns that into a clean error instead.
+    await getPublicClient(args.chainId).simulateContract({
+        account: args.wallet.address,
+        address: cfg.messageTransmitter,
+        abi: messageTransmitterV2Abi,
+        functionName: 'receiveMessage',
+        args: [args.message, args.attestation],
+    });
     const hash = await args.wallet.walletClient.writeContract({
         account: args.wallet.address,
         chain: cfg.chain,
-        address: EVM_CCTP_CONTRACTS.messageTransmitterV2,
+        address: cfg.messageTransmitter,
         abi: messageTransmitterV2Abi,
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],

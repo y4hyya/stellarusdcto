@@ -1,6 +1,5 @@
 <script lang="ts">
     import {
-        EVM_CCTP_CONTRACTS,
         EVM_CHAINS,
         EVM_MAX_FEE,
         STELLAR,
@@ -78,7 +77,7 @@
 
     let isSendCalls = $derived(inboundFlow === 'send-calls');
 
-    const contractAddress = EVM_CCTP_CONTRACTS.tokenMessengerV2;
+    let contractAddress = $derived(cfg.tokenMessenger);
     const contractLabel = 'TokenMessengerV2';
     const functionName = 'depositForBurnWithHook';
 
@@ -210,7 +209,7 @@
                         <ContractArg
                             name="spender"
                             type="address"
-                            value={EVM_CCTP_CONTRACTS.tokenMessengerV2}
+                            value={cfg.tokenMessenger}
                             note="TokenMessengerV2"
                             truncate
                         />
@@ -226,8 +225,8 @@
                 <div class="bundle-call">
                     <div class="bundle-head">
                         <span class="bundle-num">2</span>
-                        <code class="bundle-target" title={EVM_CCTP_CONTRACTS.tokenMessengerV2}>
-                            {shortAddr(EVM_CCTP_CONTRACTS.tokenMessengerV2)}
+                        <code class="bundle-target" title={cfg.tokenMessenger}>
+                            {shortAddr(cfg.tokenMessenger)}
                         </code>
                         <span class="bundle-dot">·</span>
                         <code class="bundle-fn">depositForBurnWithHook</code>

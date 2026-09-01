@@ -3,7 +3,7 @@
 // while they migrate. New code imports from $lib/registry directly. This file
 // disappears once the migration lands.
 
-import { getChain, getRegistry, stellarConfig, TESTNET } from './registry';
+import { getChain, getRegistry, stellarConfig } from './registry';
 import type { EvmChainEntry, SolanaChainEntry, TransferSpeed } from './registry';
 
 export { arcTestnet } from './registry/testnet';
@@ -33,12 +33,11 @@ export const SOLANA = {
     usdc: { mint: solanaEntry.usdcMint, decimals: 6 },
 } as const;
 
-const evmEntries = TESTNET.chains.filter((c): c is EvmChainEntry => c.family === 'evm');
-
-export const EVM_CCTP_CONTRACTS = {
-    tokenMessengerV2: evmEntries[0].tokenMessenger,
-    messageTransmitterV2: evmEntries[0].messageTransmitter,
-} as const;
+// Resolved from the ACTIVE registry, never a fixed one: this map feeds every
+// EVM transaction the app signs, and pinning it to one environment once sent
+// a mainnet mint to a testnet contract. Contracts are carried per chain
+// because the pair is not uniform (EDGE mainnet runs its own deployment).
+const evmEntries = getRegistry().chains.filter((c): c is EvmChainEntry => c.family === 'evm');
 
 // Registry chain ids are open ended now that the roster covers all of CCTP.
 export type EvmChainId = string;
@@ -51,6 +50,8 @@ export type EvmChainConfig = {
     explorer: string;
     usdc: `0x${string}`;
     usdcDecimals: number;
+    tokenMessenger: `0x${string}`;
+    messageTransmitter: `0x${string}`;
     gasNote: string;
     attestationEtaMs?: number;
 };
@@ -66,6 +67,8 @@ export const EVM_CHAINS = Object.fromEntries(
             explorer: entry.explorer,
             usdc: entry.usdc,
             usdcDecimals: 6,
+            tokenMessenger: entry.tokenMessenger,
+            messageTransmitter: entry.messageTransmitter,
             gasNote: entry.gasNote,
             attestationEtaMs: entry.attestationEtaMs,
         } satisfies EvmChainConfig,
