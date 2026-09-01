@@ -40,7 +40,8 @@ export const EVM_CCTP_CONTRACTS = {
     messageTransmitterV2: evmEntries[0].messageTransmitter,
 } as const;
 
-export type EvmChainId = 'arc' | 'base' | 'ethereum';
+// Registry chain ids are open ended now that the roster covers all of CCTP.
+export type EvmChainId = string;
 
 export type EvmChainConfig = {
     id: EvmChainId;

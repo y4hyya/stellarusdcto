@@ -42,8 +42,8 @@
     let etaText = $derived.by(() => {
         if (speed === 'fast') return '~20 s, then you claim';
         const eta = sourceEntry?.attestationEtaMs;
-        if (eta === undefined) return '~1 min, then you claim';
-        if (eta < 90_000) return '~1 min, then you claim';
+        if (eta === undefined || eta < 90_000) return '~1 min, then you claim';
+        if (eta >= 90 * 60_000) return `~${Math.round(eta / 3_600_000)} h, then you claim`;
         return `~${Math.round(eta / 60_000)} min, then you claim`;
     });
 

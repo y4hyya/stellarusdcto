@@ -89,6 +89,35 @@ describe('registry data', () => {
         });
     });
 
+    test('testnet carries the full CCTP V2 EVM roster plus Solana', () => {
+        // Every USDC domain except Stellar (27), BNB (17, USYC only), the
+        // deferred non EVM stacks Aptos (9) and Starknet (25), and Pharos
+        // (31, no working public RPC, see the note in testnet.ts).
+        const expected = [
+            0, 1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 26, 28, 29, 30, 32, 33,
+            37,
+        ];
+        const domains = TESTNET.chains.map((c) => c.domain).sort((a, b) => a - b);
+        expect(domains).toEqual(expected);
+        expect(TESTNET.chains.filter((c) => c.family === 'evm')).toHaveLength(24);
+    });
+
+    test('fast transfer is offered exactly where circle offers it', () => {
+        const fast = TESTNET.chains
+            .filter((c) => c.fastSource)
+            .map((c) => c.domain)
+            .sort((a, b) => a - b);
+        // Circle's fast source column: Ethereum, OP, Arbitrum, Solana, Base,
+        // Unichain, Linea, Codex, World Chain, Ink, Plume, EDGE, Morph, X Layer.
+        expect(fast).toEqual([0, 2, 3, 5, 6, 10, 11, 12, 14, 21, 22, 28, 30, 37]);
+    });
+
+    test('every evm chain id is unique and kebab friendly', () => {
+        for (const c of TESTNET.chains) {
+            expect(c.id).toMatch(/^[a-z0-9]+$/);
+        }
+    });
+
     test('every chain carries a hex accent color for its badge', () => {
         eachRegistry((r) => {
             for (const c of r.chains) {

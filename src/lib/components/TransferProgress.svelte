@@ -60,12 +60,17 @@
         return `${m}m ${r.toString().padStart(2, '0')}s`;
     }
 
+    function fmtDuration(ms: number): string {
+        if (ms >= 90 * 60_000) return `${Math.round(ms / 3_600_000)} hours`;
+        return `${Math.round(ms / 60_000)} minutes`;
+    }
+
     function fmtRemaining(startedAt: number, etaMs: number): string {
         const elapsed = now - startedAt;
         const remaining = etaMs - elapsed;
         if (remaining <= 0) return 'any moment now';
-        const m = Math.ceil(remaining / 60_000);
-        return `~${m} min remaining`;
+        if (remaining >= 90 * 60_000) return `~${Math.ceil(remaining / 3_600_000)} h remaining`;
+        return `~${Math.ceil(remaining / 60_000)} min remaining`;
     }
 
     function isLongWait(stepKey: string, status: string) {
@@ -166,7 +171,7 @@
                     {#if isLongWait(step.key, step.status) && step.startedAt && longWaitEtaMs !== undefined}
                         <aside class="long-wait">
                             <strong>
-                                This step usually takes about {Math.round(longWaitEtaMs / 60_000)} minutes.
+                                This step usually takes about {fmtDuration(longWaitEtaMs)}.
                             </strong>
                             <span class="long-wait-sub">
                                 Circle's attesters are waiting for {longWaitChainLabel}'s batch to
