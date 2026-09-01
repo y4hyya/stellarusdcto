@@ -6,12 +6,40 @@ import type { ChainEntry, NetworkEnv, Registry, StellarConfig } from './types';
 export * from './types';
 export { TESTNET, MAINNET };
 
-// The active environment is fixed to testnet until mainnet routes are
-// verified end to end. Everything reads through this seam so flipping the
-// environment later is one change.
-const ACTIVE_ENV: NetworkEnv = 'testnet';
+// The environment is chosen once per page load: everything downstream
+// (clients, compat config, fee caches) is built from module state, so
+// switching REQUIRES a full reload. setEnv persists the choice and the
+// header does the reload. Outside a browser (tests, scripts) it is testnet.
+const ENV_STORAGE_KEY = 'stellarusdcto.env';
+
+function initialEnv(): NetworkEnv {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            const stored = localStorage.getItem(ENV_STORAGE_KEY);
+            if (stored === 'mainnet' || stored === 'testnet') return stored;
+        }
+    } catch {
+        // Private mode or storage denied: default applies.
+    }
+    return 'testnet';
+}
+
+const ACTIVE_ENV: NetworkEnv = initialEnv();
 
 const REGISTRIES: Record<NetworkEnv, Registry> = { testnet: TESTNET, mainnet: MAINNET };
+
+export function getEnv(): NetworkEnv {
+    return ACTIVE_ENV;
+}
+
+/** Persist the choice. The caller must reload the page for it to apply. */
+export function setEnv(env: NetworkEnv): void {
+    try {
+        localStorage.setItem(ENV_STORAGE_KEY, env);
+    } catch {
+        // Without storage the choice cannot stick; the reload falls back.
+    }
+}
 
 export function getRegistry(): Registry {
     return REGISTRIES[ACTIVE_ENV];

@@ -1,13 +1,15 @@
-// Empirical verification of the testnet registry: for every EVM entry,
-// prove the RPC answers with the expected chain id, that the USDC token and
-// the CCTP TokenMessengerV2 actually have code at the configured addresses,
-// and that Circle's fee API quotes the domain against Stellar (27).
-// Run with: pnpm exec tsx scripts/check-chains.ts
+// Empirical verification of the registry: for every EVM entry, prove the
+// RPC answers with the expected chain id, that the USDC token and the CCTP
+// TokenMessengerV2 actually have code at the configured addresses, and that
+// Circle's fee API quotes the domain against Stellar (27).
+// Run with: pnpm exec tsx scripts/check-chains.ts [--mainnet]
 
-import { TESTNET } from '../src/lib/registry/index';
+import { MAINNET, TESTNET } from '../src/lib/registry/index';
 import type { EvmChainEntry } from '../src/lib/registry/types';
 
-const evmChains = TESTNET.chains.filter((c): c is EvmChainEntry => c.family === 'evm');
+const registry = process.argv.includes('--mainnet') ? MAINNET : TESTNET;
+console.log(`verifying the ${registry.env} registry\n`);
+const evmChains = registry.chains.filter((c): c is EvmChainEntry => c.family === 'evm');
 
 async function rpc(url: string, method: string, params: unknown[]): Promise<string> {
     const res = await fetch(url, {
@@ -42,7 +44,7 @@ for (const entry of evmChains) {
         problems.push(`rpc unreachable: ${err instanceof Error ? err.message : String(err)}`);
     }
     try {
-        const fee = await fetch(`${TESTNET.irisBase}/v2/burn/USDC/fees/${entry.domain}/27`, {
+        const fee = await fetch(`${registry.irisBase}/v2/burn/USDC/fees/${entry.domain}/27`, {
             signal: AbortSignal.timeout(15_000),
         });
         if (!fee.ok) {
@@ -71,4 +73,4 @@ if (failures > 0) {
     console.error(`\n${failures} of ${evmChains.length} chains failed verification`);
     process.exit(1);
 }
-console.log(`\nall ${evmChains.length} EVM testnet chains verified`);
+console.log(`\nall ${evmChains.length} EVM ${registry.env} chains verified`);

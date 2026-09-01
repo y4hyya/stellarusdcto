@@ -65,9 +65,28 @@ describe('registry data', () => {
         }
         for (const c of MAINNET.chains) {
             if (c.family !== 'evm') continue;
-            expect(c.tokenMessenger).toBe('0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d');
-            expect(c.messageTransmitter).toBe('0x81D40F21F12A8F0E3252Bccb954D722d4c464B64');
+            if (c.id === 'edge') {
+                // EDGE mainnet runs its own deployment of the V2 contracts.
+                expect(c.tokenMessenger).toBe('0x98706A006bc632Df31CAdFCBD43F38887ce2ca5c');
+                expect(c.messageTransmitter).toBe('0x5b61381Fc9e58E70EfC13a4A97516997019198ee');
+                continue;
+            }
+            expect(c.tokenMessenger, c.id).toBe('0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d');
+            expect(c.messageTransmitter, c.id).toBe('0x81D40F21F12A8F0E3252Bccb954D722d4c464B64');
         }
+    });
+
+    test('mainnet carries the full CCTP V2 EVM roster plus Solana', () => {
+        // Same exclusions as testnet (Stellar 27, BNB 17, Aptos 9, Starknet
+        // 25) except: Pharos (31) IS here because its mainnet RPC works, and
+        // Arc (26) stays out until Circle publishes mainnet parameters.
+        const expected = [
+            0, 1, 2, 3, 5, 6, 7, 10, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22, 28, 29, 30, 31, 32, 33,
+            37,
+        ];
+        const domains = MAINNET.chains.map((c) => c.domain).sort((a, b) => a - b);
+        expect(domains).toEqual(expected);
+        expect(MAINNET.chains.filter((c) => c.family === 'evm')).toHaveLength(24);
     });
 
     test('iris hosts never cross environments', () => {

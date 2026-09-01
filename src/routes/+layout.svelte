@@ -7,18 +7,28 @@
     import { page } from '$app/state';
     import { resolve } from '$app/paths';
     import HistoryPanel from '$lib/components/HistoryPanel.svelte';
+    import { getEnv, setEnv, type NetworkEnv } from '$lib/registry';
     import { detectAllWallets } from '$lib/ui/wallets.svelte';
 
     let { children } = $props();
 
     let history = $state<{ open: () => void } | undefined>();
     let theme = $state<'light' | 'dark' | null>(null);
+    let env = $state<NetworkEnv>('testnet');
 
     onMount(() => {
         detectAllWallets();
         const stored = document.documentElement.dataset.theme;
         theme = stored === 'light' || stored === 'dark' ? stored : null;
+        env = getEnv();
     });
+
+    function switchEnv() {
+        // Everything downstream is built per environment at load time, so a
+        // switch is a persisted choice plus a clean reload.
+        setEnv(env === 'testnet' ? 'mainnet' : 'testnet');
+        location.reload();
+    }
 
     function toggleTheme() {
         const effective =
@@ -52,7 +62,13 @@
             <button class="nav-link as-button" onclick={() => history?.open()}>History</button>
         </nav>
         <div class="top-right glass">
-            <span class="net-badge">Testnet</span>
+            <button
+                class="net-badge {env}"
+                onclick={switchEnv}
+                title={env === 'testnet' ? 'Switch to Mainnet' : 'Switch to Testnet'}
+            >
+                {env === 'testnet' ? 'Testnet' : 'Mainnet'}
+            </button>
             <button class="theme" onclick={toggleTheme} aria-label="Switch color theme">
                 <span aria-hidden="true">◐</span>
             </button>
@@ -162,8 +178,24 @@
         font-weight: 600;
         letter-spacing: 0.07em;
         text-transform: uppercase;
-        color: var(--warning);
         white-space: nowrap;
+        background: none;
+        border: 1px solid transparent;
+        border-radius: 999px;
+        padding: 0.25rem 0.55rem;
+        min-height: 30px;
+    }
+
+    .net-badge.testnet {
+        color: var(--warning);
+    }
+
+    .net-badge.mainnet {
+        color: var(--success);
+    }
+
+    .net-badge:hover {
+        border-color: var(--border-strong);
     }
 
     .theme {

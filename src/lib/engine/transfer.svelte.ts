@@ -617,8 +617,8 @@ export function createTransferEngine(initialSourceId: string, initialDestId: str
             }
             fail(
                 new TransferError('HASH_INVALID', {
-                    userMessage: 'Circle has no record of this burn yet on any supported chain.',
-                    action: 'Check the hash, or wait a moment if the burn just happened and try again.',
+                    userMessage: `Circle has no ${getRegistry().env} record of this burn on any supported chain.`,
+                    action: 'Check the hash, make sure the Testnet/Mainnet switch in the header matches where the burn happened, or wait a moment if it just happened and try again.',
                     raw: args.burnHash,
                 }),
             );

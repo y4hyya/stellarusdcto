@@ -1,6 +1,7 @@
 <script lang="ts">
     import { formatUsdc } from '$lib/amounts';
     import { resolve } from '$app/paths';
+    import { getEnv } from '$lib/registry';
     import { clearJournal, listTransfers, type TransferRecord } from '$lib/journal/journal';
 
     let dialog = $state<HTMLDialogElement | undefined>();
@@ -57,6 +58,9 @@
                         <span class="amount">{formatUsdc(BigInt(record.amount6))} USDC</span>
                     </div>
                     <div class="row-sub">
+                        {#if record.env !== getEnv()}
+                            <span class="env-tag">{record.env}</span>
+                        {/if}
                         <span class="phase {record.phase}">{phaseLabel(record)}</span>
                         <span class="when">{age(record)}</span>
                         {#if record.phase !== 'done' && record.burnTxId}
@@ -172,6 +176,17 @@
         gap: 0.6rem;
         font-size: 0.75rem;
         color: var(--text-dim);
+    }
+
+    .env-tag {
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.65rem;
+        font-weight: 700;
+        color: var(--warning);
+        border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+        border-radius: 999px;
+        padding: 0.05rem 0.4rem;
     }
 
     .phase.done {
