@@ -192,6 +192,12 @@
         gap: 0.5rem;
     }
 
+    @media (max-width: 560px) {
+        .hash-input {
+            font-size: 16px;
+        }
+    }
+
     .hash-input {
         flex: 1;
         min-width: 0;

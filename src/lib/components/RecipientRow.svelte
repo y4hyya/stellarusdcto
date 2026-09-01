@@ -213,6 +213,12 @@
         border-color: var(--accent);
     }
 
+    @media (max-width: 560px) {
+        .input {
+            font-size: 16px;
+        }
+    }
+
     .input {
         flex: 1;
         min-width: 0;

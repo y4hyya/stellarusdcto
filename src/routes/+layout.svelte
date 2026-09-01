@@ -7,40 +7,28 @@
     import { page } from '$app/state';
     import { resolve } from '$app/paths';
     import HistoryPanel from '$lib/components/HistoryPanel.svelte';
-    import { getEnv, setEnv, type NetworkEnv } from '$lib/registry';
+    import { envPinnedByHost, getEnv, setEnv, SITE_URLS, type NetworkEnv } from '$lib/registry';
     import { detectAllWallets } from '$lib/ui/wallets.svelte';
 
     let { children } = $props();
 
     let history = $state<{ open: () => void } | undefined>();
-    let theme = $state<'light' | 'dark' | null>(null);
     let env = $state<NetworkEnv>('testnet');
+    let pinned = $state(true);
 
     onMount(() => {
         detectAllWallets();
-        const stored = document.documentElement.dataset.theme;
-        theme = stored === 'light' || stored === 'dark' ? stored : null;
         env = getEnv();
+        pinned = envPinnedByHost();
     });
 
-    function switchEnv() {
-        // Everything downstream is built per environment at load time, so a
-        // switch is a persisted choice plus a clean reload.
-        setEnv(env === 'testnet' ? 'mainnet' : 'testnet');
-        location.reload();
-    }
+    let other = $derived<NetworkEnv>(env === 'testnet' ? 'mainnet' : 'testnet');
 
-    function toggleTheme() {
-        const effective =
-            theme ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        const next = effective === 'dark' ? 'light' : 'dark';
-        theme = next;
-        document.documentElement.dataset.theme = next;
-        try {
-            localStorage.setItem('stellarusdcto.theme', next);
-        } catch {
-            // Private mode: the choice just does not persist.
-        }
+    function switchEnv() {
+        // Local development only: deployed sites pin the environment by
+        // domain, so there the badge links to the other site instead.
+        setEnv(other);
+        location.reload();
     }
 </script>
 
@@ -62,16 +50,17 @@
             <button class="nav-link as-button" onclick={() => history?.open()}>History</button>
         </nav>
         <div class="top-right glass">
-            <button
-                class="net-badge {env}"
-                onclick={switchEnv}
-                title={env === 'testnet' ? 'Switch to Mainnet' : 'Switch to Testnet'}
-            >
-                {env === 'testnet' ? 'Testnet' : 'Mainnet'}
-            </button>
-            <button class="theme" onclick={toggleTheme} aria-label="Switch color theme">
-                <span aria-hidden="true">◐</span>
-            </button>
+            {#if pinned}
+                <span class="net-badge {env}">{env === 'testnet' ? 'Testnet' : 'Mainnet'}</span>
+                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL to the sibling site -->
+                <a class="net-link" href={SITE_URLS[other]} title="Open the {other} site">
+                    {other === 'testnet' ? 'Testnet' : 'Mainnet'} ↗
+                </a>
+            {:else}
+                <button class="net-badge {env}" onclick={switchEnv} title="Switch to {other}">
+                    {env === 'testnet' ? 'Testnet' : 'Mainnet'}
+                </button>
+            {/if}
         </div>
     </header>
 
@@ -111,6 +100,7 @@
 <style>
     .shell {
         min-height: 100vh;
+        min-height: 100dvh;
         display: flex;
         flex-direction: column;
     }
@@ -169,7 +159,7 @@
         display: flex;
         align-items: center;
         gap: 0.45rem;
-        padding: 0.3rem 0.3rem 0.3rem 0.7rem;
+        padding: 0.3rem 0.45rem;
         border-radius: 999px;
     }
 
@@ -194,26 +184,31 @@
         color: var(--success);
     }
 
-    .net-badge:hover {
+    button.net-badge:hover {
         border-color: var(--border-strong);
     }
 
-    .theme {
-        width: 34px;
-        height: 34px;
-        border-radius: 999px;
-        background: var(--bg-elev-2);
-        border: 1px solid var(--border);
-        color: var(--text-muted);
+    .net-badge {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        font-size: 1rem;
     }
 
-    .theme:hover {
-        border-color: var(--border-strong);
+    .net-link {
+        font-size: 0.72rem;
+        font-weight: 500;
+        color: var(--text-dim);
+        white-space: nowrap;
+        padding: 0.25rem 0.55rem;
+        min-height: 30px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+    }
+
+    .net-link:hover {
         color: var(--text);
+        background: var(--bg-elev-2);
+        text-decoration: none;
     }
 
     .content {

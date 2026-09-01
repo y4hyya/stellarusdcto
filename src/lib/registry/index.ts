@@ -7,24 +7,52 @@ export * from './types';
 export { TESTNET, MAINNET };
 
 // The environment is chosen once per page load: everything downstream
-// (clients, compat config, fee caches) is built from module state, so
-// switching REQUIRES a full reload. setEnv persists the choice and the
-// header does the reload. Outside a browser (tests, scripts) it is testnet.
+// (clients, compat config, fee caches) is built from module state. In
+// production the DOMAIN decides: the main site serves only mainnet, the
+// testnet site only testnet, and no stored value can flip either. Local
+// development keeps a stored toggle (setEnv + reload), defaulting testnet.
 const ENV_STORAGE_KEY = 'stellarusdcto.env';
 
-function initialEnv(): NetworkEnv {
-    try {
-        if (typeof localStorage !== 'undefined') {
-            const stored = localStorage.getItem(ENV_STORAGE_KEY);
-            if (stored === 'mainnet' || stored === 'testnet') return stored;
+export const SITE_URLS = {
+    mainnet: 'https://stellarusdcto.vercel.app',
+    testnet: 'https://stellarusdcto-testnet.vercel.app',
+} as const;
+
+function isLocalHostname(hostname: string): boolean {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.localhost');
+}
+
+/** Which environment a hostname serves. Exported for tests. */
+export function resolveEnv(hostname: string | undefined, stored: string | null): NetworkEnv {
+    if (hostname) {
+        const h = hostname.toLowerCase();
+        if (!isLocalHostname(h)) {
+            return h.startsWith('stellarusdcto-testnet') || h.startsWith('testnet.')
+                ? 'testnet'
+                : 'mainnet';
         }
+    }
+    return stored === 'mainnet' || stored === 'testnet' ? stored : 'testnet';
+}
+
+function storedEnv(): string | null {
+    try {
+        if (typeof localStorage !== 'undefined') return localStorage.getItem(ENV_STORAGE_KEY);
     } catch {
         // Private mode or storage denied: default applies.
     }
-    return 'testnet';
+    return null;
 }
 
-const ACTIVE_ENV: NetworkEnv = initialEnv();
+const ACTIVE_ENV: NetworkEnv = resolveEnv(
+    typeof location !== 'undefined' ? location.hostname : undefined,
+    storedEnv(),
+);
+
+/** True when the domain fixes the environment (any deployed site). */
+export function envPinnedByHost(): boolean {
+    return typeof location !== 'undefined' && !isLocalHostname(location.hostname.toLowerCase());
+}
 
 const REGISTRIES: Record<NetworkEnv, Registry> = { testnet: TESTNET, mainnet: MAINNET };
 
@@ -32,7 +60,7 @@ export function getEnv(): NetworkEnv {
     return ACTIVE_ENV;
 }
 
-/** Persist the choice. The caller must reload the page for it to apply. */
+/** Persist the dev toggle choice. Only local hosts honor it; reload to apply. */
 export function setEnv(env: NetworkEnv): void {
     try {
         localStorage.setItem(ENV_STORAGE_KEY, env);

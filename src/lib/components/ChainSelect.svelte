@@ -132,6 +132,12 @@
         border-bottom: 1px solid var(--border);
     }
 
+    @media (max-width: 560px) {
+        .search {
+            font-size: 16px;
+        }
+    }
+
     .search {
         flex: 1;
         min-height: 44px;
