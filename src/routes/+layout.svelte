@@ -34,8 +34,10 @@
     }
 </script>
 
+<div class="wallpaper" aria-hidden="true"></div>
+
 <div class="shell">
-    <header class="top">
+    <header class="top glass">
         <a class="wordmark" href={resolve('/')}>
             <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
                 <rect width="64" height="64" rx="14" fill="#2775CA" />
@@ -112,9 +114,9 @@
         align-items: center;
         gap: 1.25rem;
         padding: 0.85rem 1.25rem;
-        border-bottom: 1px solid var(--border);
-        background: color-mix(in srgb, var(--bg-elev) 82%, transparent);
-        backdrop-filter: blur(8px);
+        border-left: none;
+        border-right: none;
+        border-top: none;
         position: sticky;
         top: 0;
         z-index: 20;
@@ -129,6 +131,7 @@
         font-weight: 500;
         color: var(--text);
         letter-spacing: -0.01em;
+        white-space: nowrap;
     }
 
     .wordmark:hover {
@@ -226,10 +229,14 @@
         gap: 0.35rem;
         align-items: center;
         text-align: center;
-        padding: 1.25rem;
-        border-top: 1px solid var(--border);
-        color: var(--text-dim);
+        padding: 1.5rem 1.25rem 2rem;
+        color: var(--wall-text-dim);
+        text-shadow: var(--wall-shadow);
         font-size: 0.8rem;
+    }
+
+    .foot :global(a) {
+        color: var(--wall-text);
     }
 
     @media (max-width: 560px) {

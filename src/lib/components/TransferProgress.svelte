@@ -129,7 +129,7 @@
     }
 </script>
 
-<section class="progress">
+<section class="progress glass">
     <p class="sr-only" role="status" aria-live="polite">{announcement}</p>
     <header class="head">
         <h3 class="title">Transfer</h3>
@@ -258,13 +258,14 @@
 
 <style>
     .progress {
-        background: var(--bg-elev);
-        border: 1px solid var(--border);
         border-radius: var(--radius-lg);
         padding: 1.25rem;
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        width: 100%;
+        max-width: 30rem;
+        margin: 0 auto;
     }
 
     .head {

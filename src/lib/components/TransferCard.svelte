@@ -192,7 +192,7 @@
     );
 </script>
 
-<section class="card" aria-label="Transfer USDC">
+<section class="card glass" aria-label="Transfer USDC">
     {#if engine.state.phase === 'idle'}
         <div class="side">
             <div class="side-head">
@@ -381,10 +381,7 @@
         max-width: 30rem;
         margin: 0 auto;
         padding: 1.25rem;
-        background: var(--bg-elev);
-        border: 1px solid var(--border);
         border-radius: var(--radius-lg);
-        box-shadow: var(--shadow-card);
     }
 
     .side {
@@ -571,7 +568,7 @@
     .picker-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(9, 12, 18, 0.55);
+        background: rgba(10, 5, 3, 0.6);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -585,9 +582,11 @@
         width: min(20rem, calc(100vw - 2rem));
         padding: 1rem;
         background: var(--bg-elev);
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
         border: 1px solid var(--border);
         border-radius: var(--radius-lg);
-        box-shadow: var(--shadow-pop);
+        box-shadow: var(--glass-edge), var(--shadow-pop);
     }
 
     .picker-title {

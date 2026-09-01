@@ -72,7 +72,7 @@
         </p>
     </header>
 
-    <section class="box" aria-label="Rescue by burn hash">
+    <section class="box glass" aria-label="Rescue by burn hash">
         <label class="hash-label" for="burn-hash">Burn transaction hash</label>
         <div class="hash-row">
             <input
@@ -159,11 +159,14 @@
         font-size: 1.7rem;
         font-weight: 650;
         letter-spacing: -0.02em;
+        color: var(--wall-text);
+        text-shadow: var(--wall-shadow);
     }
 
     .sub {
         margin: 0;
-        color: var(--text-muted);
+        color: var(--wall-text-dim);
+        text-shadow: var(--wall-shadow);
         font-size: 0.92rem;
         line-height: 1.55;
     }
@@ -173,10 +176,7 @@
         flex-direction: column;
         gap: 0.6rem;
         padding: 1.25rem;
-        background: var(--bg-elev);
-        border: 1px solid var(--border);
         border-radius: var(--radius-lg);
-        box-shadow: var(--shadow-card);
     }
 
     .hash-label {
@@ -289,6 +289,8 @@
 
     .again {
         align-self: center;
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
         min-height: 44px;
         padding: 0 1.2rem;
         background: var(--bg-elev-2);

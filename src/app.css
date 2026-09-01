@@ -9,38 +9,48 @@
 :root {
     color-scheme: light dark;
 
-    /* Surfaces: paper by day, after hours desk by night. */
-    --bg: light-dark(#f4f6f8, #0c0f14);
-    --bg-elev: light-dark(#ffffff, #131820);
-    --bg-elev-2: light-dark(#eef1f5, #1a212c);
-    --border: light-dark(#e2e6ec, #232b37);
-    --border-strong: light-dark(#c7cfda, #35425a);
+    /* The ground is always the wallpaper. The theme decides the LIQUID:
+       milk glass panels with dark ink by day, smoke glass with light ink
+       after hours. Panels stay opaque enough that the halftone art gives
+       atmosphere at the edges, never noise behind the numbers. */
+    --bg: light-dark(rgba(255, 253, 250, 0.55), rgba(12, 8, 6, 0.55));
+    --bg-elev: light-dark(rgba(248, 244, 239, 0.88), rgba(19, 13, 11, 0.78));
+    --bg-elev-2: light-dark(rgba(255, 255, 255, 0.62), rgba(255, 245, 235, 0.07));
+    --border: light-dark(rgba(24, 16, 12, 0.14), rgba(255, 240, 228, 0.13));
+    --border-strong: light-dark(rgba(24, 16, 12, 0.3), rgba(255, 240, 228, 0.26));
 
-    --text: light-dark(#161a21, #e8ecf3);
-    --text-muted: light-dark(#525b6b, #9aa5b6);
-    --text-dim: light-dark(#68727f, #8391a4);
+    --text: light-dark(#1a1410, #f2ece3);
+    --text-muted: light-dark(#584e46, #b3a99e);
+    --text-dim: light-dark(#6d635a, #9b9187);
 
-    /* One authoritative accent: USDC blue. */
-    --accent: light-dark(#2775ca, #64a7ec);
-    --accent-hover: light-dark(#1e63ae, #82b9f1);
-    --accent-dim: light-dark(#e4eef9, #16293e);
+    /* One authoritative accent: USDC blue, cool against the ember ground. */
+    --accent: light-dark(#2775ca, #6fb0f2);
+    --accent-hover: light-dark(#1e63ae, #8cc1f6);
+    --accent-dim: light-dark(rgba(39, 117, 202, 0.14), rgba(111, 176, 242, 0.16));
     --accent-strong: #2775ca;
     --accent-contrast: #ffffff;
 
     --stellar: light-dark(#8a6d00, #fdda24);
 
-    --success: light-dark(#15803d, #4ade80);
-    --warning: light-dark(#92610e, #f5c542);
-    --error: light-dark(#c02626, #f27272);
-    --success-dim: light-dark(#e5f5ec, #10281b);
-    --warning-dim: light-dark(#faf3e0, #2d2410);
-    --error-dim: light-dark(#fcebeb, #331717);
+    --success: light-dark(#146c39, #55e08d);
+    --warning: light-dark(#8a5c0a, #f6c64a);
+    --error: light-dark(#b32222, #ff8577);
+    --success-dim: light-dark(rgba(21, 128, 61, 0.12), rgba(85, 224, 141, 0.12));
+    --warning-dim: light-dark(rgba(146, 97, 14, 0.12), rgba(246, 198, 74, 0.12));
+    --error-dim: light-dark(rgba(192, 38, 38, 0.1), rgba(255, 133, 119, 0.13));
+
+    /* Ink that sits directly on the wallpaper (hero, footer): always light. */
+    --wall-text: #f6efe6;
+    --wall-text-dim: rgba(246, 239, 230, 0.75);
+    --wall-shadow: 0 1px 14px rgba(10, 4, 2, 0.65);
 
     --radius: 10px;
     --radius-lg: 16px;
-    --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
-    --shadow-card: light-dark(0 1px 2px rgba(16, 24, 40, 0.05), 0 0 0 rgba(0, 0, 0, 0));
-    --shadow-pop: light-dark(0 12px 32px rgba(16, 24, 40, 0.1), 0 12px 32px rgba(0, 0, 0, 0.45));
+    --ring: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
+    --shadow-card: 0 18px 48px rgba(8, 3, 2, 0.4);
+    --shadow-pop: 0 24px 64px rgba(8, 3, 2, 0.55);
+    --glass-blur: blur(22px) saturate(1.2);
+    --glass-edge: inset 0 1px 0 rgba(255, 250, 242, 0.14);
 
     --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --sans:
@@ -67,12 +77,40 @@ body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    background: var(--bg);
+    background: #140d0a;
     color: var(--text);
     font-family: var(--sans);
     font-size: 15px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+}
+
+/* The wallpaper: fixed behind everything, dimmed toward the bottom so the
+   scrolling content always has ground to stand on. */
+.wallpaper {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(14, 8, 6, 0.22) 0%,
+            rgba(14, 8, 6, 0.62) 72%,
+            rgba(14, 8, 6, 0.8) 100%
+        ),
+        url('/wallpaper.png') center / cover no-repeat,
+        #140d0a;
+}
+
+/* Liquid glass: one blur per major surface, opaque enough to read through
+   the halftone, with a specular top edge. Inner elevations are plain
+   translucent tints, never a second blur. */
+.glass {
+    background: var(--bg-elev);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border);
+    box-shadow: var(--glass-edge), var(--shadow-card);
 }
 
 a {
@@ -122,16 +160,18 @@ code {
 /* Native dialogs carry the modal chrome for chain select and history. */
 dialog {
     background: var(--bg-elev);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-pop);
+    box-shadow: var(--glass-edge), var(--shadow-pop);
     padding: 0;
 }
 
 dialog::backdrop {
-    background: rgba(9, 12, 18, 0.55);
-    backdrop-filter: blur(2px);
+    background: rgba(10, 5, 3, 0.6);
+    backdrop-filter: blur(3px);
 }
 
 /* Settlement slip rows: label, dotted leader, value. */
