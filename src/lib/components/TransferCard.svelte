@@ -11,19 +11,19 @@
     import { parseUsdc } from '$lib/amounts';
     import { TransferError } from '$lib/errors/codes';
     import { createTransferEngine } from '$lib/engine/transfer.svelte';
-    import type { FlowKind } from '$lib/engine/core';
+    import { sideFamily, sideLabel, type FlowKind, type RouteSide } from '$lib/engine/core';
+    import { untrack } from 'svelte';
     import { getChain, getRegistry, type TransferSpeed } from '$lib/registry';
     import { resolveCta } from '$lib/ui/cta';
     import { evmWallet, solanaWallet, stellarWallet } from '$lib/ui/wallets.svelte';
     import { shortAddr } from '$lib/utils';
-    import { assets } from '$app/paths';
     import type { EvmChainId } from '$lib/config';
 
     let { onSettled }: { onSettled?: () => void } = $props();
 
-    // Route state: Stellar is always one side; the other side is a registry id.
-    let rightChain = $state(getRegistry().defaultChainId);
-    let stellarIsSource = $state(true);
+    // Route state: any two different sides, Stellar included.
+    let sourceId = $state('stellar');
+    let destId = $state(getRegistry().defaultChainId);
     let amount = $state('');
     let speed = $state<TransferSpeed>('standard');
     let forwarding = $state(false);
@@ -32,27 +32,32 @@
 
     const engine = createTransferEngine('stellar', getRegistry().defaultChainId);
 
-    let rightEntry = $derived(getChain(rightChain));
-    let sourceId = $derived(stellarIsSource ? 'stellar' : rightChain);
-    let destId = $derived(stellarIsSource ? rightChain : 'stellar');
+    let sourceSide = $derived<RouteSide>(sourceId === 'stellar' ? 'stellar' : getChain(sourceId));
+    let destSide = $derived<RouteSide>(destId === 'stellar' ? 'stellar' : getChain(destId));
 
     // Fewer knobs: when the wallet advertises EIP 5792 bundling, use it.
     let bundling = $derived(
-        !stellarIsSource && rightEntry.family === 'evm' && evmWallet.state.cap.supported,
+        sourceSide !== 'stellar' && sourceSide.family === 'evm' && evmWallet.state.cap.supported,
     );
     let flow = $derived<FlowKind>(
-        stellarIsSource ? (forwarding ? 'forwarded' : 'direct') : bundling ? 'sendCalls' : 'direct',
+        sourceId === 'stellar'
+            ? forwarding
+                ? 'forwarded'
+                : 'direct'
+            : bundling
+              ? 'sendCalls'
+              : 'direct',
     );
 
     $effect(() => {
         engine.configure(sourceId, destId, flow);
     });
 
-    let fastAllowed = $derived(!stellarIsSource && rightEntry.fastSource);
+    let fastAllowed = $derived(sourceSide !== 'stellar' && sourceSide.fastSource);
     let effectiveSpeed = $derived<TransferSpeed>(fastAllowed ? speed : 'standard');
 
     // Source side wallet facts.
-    let sourceFamily = $derived(stellarIsSource ? 'stellar' : rightEntry.family);
+    let sourceFamily = $derived(sideFamily(sourceSide));
     let sourceConnected = $derived(
         sourceFamily === 'stellar'
             ? stellarWallet.state.address !== null
@@ -77,9 +82,9 @@
     // reverts on chain because gas comes out of the same pool. Hold back a
     // little from Max and from the send gate.
     let gasReserve6 = $derived(
-        !stellarIsSource &&
-            rightEntry.family === 'evm' &&
-            rightEntry.chain.nativeCurrency.symbol === 'USDC'
+        sourceSide !== 'stellar' &&
+            sourceSide.family === 'evm' &&
+            sourceSide.chain.nativeCurrency.symbol === 'USDC'
             ? 50_000n
             : 0n,
     );
@@ -106,7 +111,7 @@
     );
 
     // Destination side: the recipient defaults to that side's connected wallet.
-    let destFamily = $derived(stellarIsSource ? rightEntry.family : 'stellar');
+    let destFamily = $derived(sideFamily(destSide));
     let destAutoAddress = $derived(
         destFamily === 'stellar'
             ? stellarWallet.state.address
@@ -147,7 +152,7 @@
             gasReserve6,
             recipientState: recipientStatus.kind,
             recipientProblem: recipientStatus.problem?.userMessage ?? null,
-            destLabel: destFamily === 'stellar' ? 'Stellar' : rightEntry.label,
+            destLabel: sideLabel(destSide),
         }),
     );
 
@@ -192,14 +197,27 @@
     }
 
     function swap() {
-        stellarIsSource = !stellarIsSource;
+        [sourceId, destId] = [destId, sourceId];
     }
 
-    function pickChain(id: string) {
-        rightChain = id;
-        const entry = getChain(id);
-        if (entry.family === 'evm') void evmWallet.setChain(id as EvmChainId);
+    function pickSource(id: string) {
+        sourceId = id;
     }
+
+    function pickDest(id: string) {
+        destId = id;
+    }
+
+    // The single EVM connection follows the EVM side that signs first: the
+    // source when it is EVM, otherwise the destination (the mint switches
+    // chains again on its own). untrack keeps wallet state out of the deps.
+    $effect(() => {
+        const evmSide =
+            sourceFamily === 'evm' ? sourceSide : destFamily === 'evm' ? destSide : null;
+        if (evmSide && evmSide !== 'stellar') {
+            untrack(() => void evmWallet.setChain(evmSide.id as EvmChainId));
+        }
+    });
 
     function reset() {
         engine.reset();
@@ -208,7 +226,10 @@
     }
 
     let showPreview = $derived(
-        engine.state.phase === 'idle' && sourceAddress !== null && recipient.trim() !== '',
+        engine.state.phase === 'idle' &&
+            sourceAddress !== null &&
+            recipient.trim() !== '' &&
+            (sourceId === 'stellar' || destId === 'stellar'),
     );
 </script>
 
@@ -243,20 +264,12 @@
                 {/if}
             </div>
             <div class="side-row">
-                {#if stellarIsSource}
-                    <span class="fixed-chain">
-                        <img
-                            class="coin"
-                            src={`${assets}/chains/stellar.svg`}
-                            alt=""
-                            width="20"
-                            height="20"
-                        />
-                        Stellar
-                    </span>
-                {:else}
-                    <ChainSelect value={rightChain} onSelect={pickChain} disabled={busy} />
-                {/if}
+                <ChainSelect
+                    value={sourceId}
+                    exclude={destId}
+                    onSelect={pickSource}
+                    disabled={busy}
+                />
                 <div class="grow">
                     <AmountInput
                         bind:amount
@@ -270,7 +283,7 @@
                 <p class="inline-warn">
                     Your wallet is on a different network.
                     <button class="mini" onclick={() => void evmWallet.switchNetwork()}>
-                        Switch to {rightEntry.label}
+                        Switch to {sideLabel(sourceSide)}
                     </button>
                 </p>
             {:else if wrongNetwork && sourceFamily === 'stellar'}
@@ -307,20 +320,12 @@
                 {/if}
             </div>
             <div class="side-row">
-                {#if stellarIsSource}
-                    <ChainSelect value={rightChain} onSelect={pickChain} disabled={busy} />
-                {:else}
-                    <span class="fixed-chain">
-                        <img
-                            class="coin"
-                            src={`${assets}/chains/stellar.svg`}
-                            alt=""
-                            width="20"
-                            height="20"
-                        />
-                        Stellar
-                    </span>
-                {/if}
+                <ChainSelect
+                    value={destId}
+                    exclude={sourceId}
+                    onSelect={pickDest}
+                    disabled={busy}
+                />
                 <div class="grow">
                     <RecipientRow
                         bind:recipient
@@ -357,10 +362,10 @@
             <details class="signing">
                 <summary>What you're signing</summary>
                 <div class="signing-body">
-                    {#if !stellarIsSource && rightEntry.family === 'evm' && evmWallet.state.wallet}
+                    {#if sourceFamily === 'evm' && destId === 'stellar' && evmWallet.state.wallet}
                         <EvmBurnPreview
                             evmAddress={evmWallet.state.wallet.address}
-                            evmChainId={rightChain as EvmChainId}
+                            evmChainId={sourceId as EvmChainId}
                             stellarRecipient={recipient}
                             {amount}
                             inboundFlow={bundling ? 'send-calls' : 'two-tx'}
@@ -368,7 +373,7 @@
                             speed={effectiveSpeed}
                         />
                         <HookDataPreview mode="forwarder" stellarRecipient={recipient} />
-                    {:else if !stellarIsSource && rightEntry.family === 'solana' && solanaWallet.state.wallet}
+                    {:else if sourceFamily === 'solana' && destId === 'stellar' && solanaWallet.state.wallet}
                         <SolanaBurnPreview
                             solanaAddress={solanaWallet.state.wallet.address}
                             stellarRecipient={recipient}
@@ -376,12 +381,12 @@
                             speed={effectiveSpeed}
                         />
                         <HookDataPreview mode="forwarder" stellarRecipient={recipient} />
-                    {:else if stellarIsSource && stellarWallet.state.address}
-                        {#if rightEntry.family === 'evm'}
+                    {:else if sourceId === 'stellar' && stellarWallet.state.address}
+                        {#if destFamily === 'evm'}
                             <StellarBurnPreview
                                 stellarAddress={stellarWallet.state.address}
                                 evmRecipient={recipient as `0x${string}`}
-                                evmChainId={rightChain as EvmChainId}
+                                evmChainId={destId as EvmChainId}
                                 {amount}
                                 {forwarding}
                                 speed={effectiveSpeed}
@@ -503,30 +508,6 @@
     .grow {
         flex: 1;
         min-width: 0;
-    }
-
-    .fixed-chain {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        min-height: 44px;
-        padding: 0.45rem 0.75rem;
-        background: var(--bg-elev-2);
-        border: 1px solid var(--border);
-        border-radius: var(--radius);
-        font-weight: 500;
-        white-space: nowrap;
-    }
-
-    .coin {
-        width: 20px;
-        height: 20px;
-        padding: 2px;
-        border-radius: 999px;
-        background: #ffffff;
-        border: 1px solid var(--border);
-        object-fit: contain;
-        flex: none;
     }
 
     .swap-rail {

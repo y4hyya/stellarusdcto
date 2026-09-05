@@ -45,6 +45,7 @@ import {
     classifyHash,
     needsApprove,
     sideFamily,
+    validateRoute,
     type FlowKind,
     type RouteSide,
     type Step,
@@ -195,8 +196,9 @@ export function createTransferEngine(initialSourceId: string, initialDestId: str
     }) {
         const source = resolveSide(args.sourceId);
         const dest = resolveSide(args.destId);
-        if ((source === 'stellar') === (dest === 'stellar')) {
-            fail(new TransferError('CONFIG_MISSING', { raw: 'exactly one side must be stellar' }));
+        const invalid = validateRoute(args.sourceId, args.destId);
+        if (invalid) {
+            fail(invalid);
             return;
         }
 

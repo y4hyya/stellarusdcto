@@ -1,5 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { buildSteps, candidateDomains, classifyHash, needsApprove } from './core';
+import {
+    buildSteps,
+    candidateDomains,
+    classifyHash,
+    needsApprove,
+    pickableSides,
+    validateRoute,
+} from './core';
+import { TransferError } from '../errors/codes';
 import { getChain, TESTNET } from '../registry';
 
 const SOLANA_SIG =
@@ -79,5 +87,48 @@ describe('buildSteps', () => {
         const steps = buildSteps('stellar', getChain('base'), 'forwarded');
         expect(steps.map((s) => s.key)).toEqual(['approve', 'burn', 'attest', 'mint']);
         expect(steps[3].label.toLowerCase()).toContain('relayer');
+    });
+});
+
+describe('validateRoute', () => {
+    test('rejects the same side twice', () => {
+        expect(validateRoute('base', 'base')).toBeInstanceOf(TransferError);
+        expect(validateRoute('stellar', 'stellar')).toBeInstanceOf(TransferError);
+    });
+
+    test('accepts any two different sides, with or without stellar', () => {
+        expect(validateRoute('arbitrum', 'base')).toBeNull();
+        expect(validateRoute('solana', 'base')).toBeNull();
+        expect(validateRoute('base', 'solana')).toBeNull();
+        expect(validateRoute('stellar', 'base')).toBeNull();
+    });
+});
+
+describe('pickableSides', () => {
+    test('lists stellar first, then every registry chain', () => {
+        const sides = pickableSides(TESTNET);
+        expect(sides[0]).toEqual({
+            id: 'stellar',
+            label: 'Stellar',
+            family: 'stellar',
+            domain: 27,
+        });
+        expect(sides).toHaveLength(TESTNET.chains.length + 1);
+        expect(sides.some((s) => s.id === 'base')).toBe(true);
+    });
+});
+
+describe('buildSteps between two non stellar chains', () => {
+    test('an evm to evm transfer approves, burns, attests, then mints plainly', () => {
+        const steps = buildSteps(getChain('arbitrum'), getChain('base'), 'direct');
+        expect(steps.map((s) => s.key)).toEqual(['approve', 'burn', 'attest', 'mint']);
+        expect(steps[0].label).toContain('Arbitrum');
+        expect(steps[3].label).toContain('Base Sepolia');
+        expect(steps[3].label).not.toContain('forwarder');
+    });
+
+    test('a solana to evm transfer skips approve', () => {
+        const steps = buildSteps(getChain('solana'), getChain('base'), 'direct');
+        expect(steps.map((s) => s.key)).toEqual(['burn', 'attest', 'mint']);
     });
 });

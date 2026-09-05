@@ -1,26 +1,32 @@
 <script lang="ts">
     import { assets } from '$app/paths';
-    import { listChains } from '$lib/registry';
-    import type { ChainEntry } from '$lib/registry';
+    import { getRegistry } from '$lib/registry';
+    import { pickableSides, type PickableSide } from '$lib/engine/core';
 
     const icon = (id: string) => `${assets}/chains/${id}.svg`;
 
     let {
         value,
         onSelect,
+        exclude,
         disabled = false,
     }: {
         value: string;
         onSelect: (id: string) => void;
+        /** The other side of the route, hidden so a chain never faces itself. */
+        exclude?: string;
         disabled?: boolean;
     } = $props();
 
     let dialog = $state<HTMLDialogElement | undefined>();
     let query = $state('');
 
-    let selected = $derived(listChains().find((c) => c.id === value));
+    const sides = pickableSides(getRegistry());
+    let selected = $derived(sides.find((c) => c.id === value));
     let filtered = $derived(
-        listChains().filter((c) => c.label.toLowerCase().includes(query.trim().toLowerCase())),
+        sides.filter(
+            (c) => c.id !== exclude && c.label.toLowerCase().includes(query.trim().toLowerCase()),
+        ),
     );
 
     function open() {
@@ -28,7 +34,7 @@
         dialog?.showModal();
     }
 
-    function pick(entry: ChainEntry) {
+    function pick(entry: PickableSide) {
         dialog?.close();
         if (entry.id !== value) onSelect(entry.id);
     }

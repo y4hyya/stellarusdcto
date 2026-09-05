@@ -1,3 +1,4 @@
+import { TransferError } from '../errors/codes';
 import type { ChainEntry, Registry, VmFamily } from '../registry/types';
 
 // Pure engine helpers: step building for any route and the hash
@@ -27,6 +28,29 @@ export function sideFamily(side: RouteSide): VmFamily {
 
 export function sideLabel(side: RouteSide): string {
     return side === 'stellar' ? 'Stellar' : side.label;
+}
+
+/** What the chain pickers offer: Stellar plus every registry chain. */
+export type PickableSide = { id: string; label: string; family: VmFamily; domain: number };
+
+export function pickableSides(registry: Registry): PickableSide[] {
+    return [
+        { id: 'stellar', label: 'Stellar', family: 'stellar', domain: registry.stellar.domain },
+        ...registry.chains.map((c) => ({
+            id: c.id,
+            label: c.label,
+            family: c.family,
+            domain: c.domain,
+        })),
+    ];
+}
+
+/** Any two different sides make a route; the same side twice never does. */
+export function validateRoute(sourceId: string, destId: string): TransferError | null {
+    if (sourceId === destId) {
+        return new TransferError('ROUTE_INVALID', { raw: `${sourceId} to itself` });
+    }
+    return null;
 }
 
 export function needsApprove(sourceFamily: VmFamily, flow: FlowKind): boolean {
