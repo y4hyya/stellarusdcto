@@ -48,6 +48,18 @@ export function translateError(raw: unknown, ctx: TranslateContext): TransferErr
         return new TransferError('ALREADY_MINTED', { raw });
     }
 
+    // Arbitrum style sequencers refuse a transaction whose fee cap is under
+    // the base fee of the block that would include it; mempool chains report
+    // the same underbid as "underpriced". A replacement that is underpriced
+    // is a different problem (nonce reuse) and stays unmatched.
+    if (
+        lower.includes('less than block base fee') ||
+        lower.includes('max fee per gas less than') ||
+        (lower.includes('underpriced') && !lower.includes('replacement'))
+    ) {
+        return new TransferError('GAS_BID_TOO_LOW', { raw });
+    }
+
     if (ctx.family === 'stellar') {
         if (msg.includes('Error(Contract, #9)')) {
             return new TransferError('ALLOWANCE_EXPIRED', { raw });

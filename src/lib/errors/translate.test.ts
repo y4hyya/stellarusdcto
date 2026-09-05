@@ -67,6 +67,24 @@ describe('translateError', () => {
         ).toBe('MAX_FEE_TOO_LOW');
     });
 
+    test('maps a gas bid the network refused, but not an underpriced replacement', () => {
+        const refused = new Error(
+            'The contract function "receiveMessage" reverted with the following reason:\n' +
+                'RPC 0x66eee Custom eth_sendRawTransaction: max fee per gas less than block base fee: ' +
+                'address 0xFdEA5EBBe7970a00792562E1c5299215cF6A3813, maxFeePerGas: 209742000, baseFee: 211594000',
+        );
+        expect(translateError(refused, { family: 'evm', phase: 'mint' }).code).toBe(
+            'GAS_BID_TOO_LOW',
+        );
+        expect(translateError(new Error('transaction underpriced'), { family: 'evm' }).code).toBe(
+            'GAS_BID_TOO_LOW',
+        );
+        expect(
+            translateError(new Error('replacement transaction underpriced'), { family: 'evm' })
+                .code,
+        ).toBe('UNKNOWN');
+    });
+
     test('keeps the raw text behind UNKNOWN for anything else', () => {
         const raw = new Error('some inscrutable failure');
         const translated = translateError(raw, {});

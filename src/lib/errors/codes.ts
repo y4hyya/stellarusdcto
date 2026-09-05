@@ -17,6 +17,7 @@ export type TransferErrorCode =
     | 'RPC_UNREACHABLE'
     | 'IRIS_RATE_LIMITED'
     | 'MAX_FEE_TOO_LOW'
+    | 'GAS_BID_TOO_LOW'
     | 'AMOUNT_INVALID'
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
@@ -103,6 +104,12 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         userMessage:
             'The fee ceiling for this transfer is below what the route currently requires.',
         action: 'Retry so a fresh fee quote is used.',
+        retryable: true,
+    },
+    GAS_BID_TOO_LOW: {
+        userMessage:
+            'The network gas price moved above what the wallet offered before the transaction was accepted. Nothing was sent and nothing was charged.',
+        action: 'Retry the step. A fresh bid is made at the current price with headroom, and the unused part of a bid is never charged.',
         retryable: true,
     },
     AMOUNT_INVALID: {
