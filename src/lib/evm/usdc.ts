@@ -1,6 +1,7 @@
 import { erc20Abi, formatUnits, parseUnits } from 'viem';
 import { EVM_CHAINS, type EvmChainId } from '$lib/config';
 import { getPublicClient } from './client';
+import { feeOverrides } from './fees';
 import type { EvmWallet } from './wallet';
 
 export async function getEvmUsdcBalance(chainId: EvmChainId, addr: `0x${string}`): Promise<bigint> {
@@ -41,6 +42,7 @@ export async function approveEvmUsdc(args: {
         abi: erc20Abi,
         functionName: 'approve',
         args: [args.spender, args.amount],
+        ...(await feeOverrides(args.chainId)),
     });
     const receipt = await getPublicClient(args.chainId).waitForTransactionReceipt({ hash });
     if (receipt.status === 'reverted') {

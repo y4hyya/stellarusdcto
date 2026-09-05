@@ -1,6 +1,7 @@
 import { encodeFunctionData, erc20Abi, toHex, type Hex } from 'viem';
 import { EVM_CHAINS, type EvmChainId } from '$lib/config';
 import { getPublicClient } from './client';
+import { feeOverrides } from './fees';
 import type { EvmWallet } from './wallet';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -166,6 +167,7 @@ export async function evmBurnToTarget(args: {
             chain: cfg.chain,
             functionName: call.functionName,
             args: call.args,
+            ...(await feeOverrides(args.chainId)),
         });
     } else {
         await client.simulateContract({
@@ -178,6 +180,7 @@ export async function evmBurnToTarget(args: {
             chain: cfg.chain,
             functionName: call.functionName,
             args: call.args,
+            ...(await feeOverrides(args.chainId)),
         });
     }
     await waitForSuccess(args.chainId, hash, 'Burn');
@@ -314,6 +317,9 @@ export async function receiveMessageOnEvm(args: {
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],
     });
+    // Bid the gas cap ourselves (see fees.ts): left to the wallet, a mint to
+    // an Arbitrum style chain is refused whenever the base fee ticks up
+    // between the wallet's quote and the sequencer's check.
     const hash = await args.wallet.walletClient.writeContract({
         account: args.wallet.address,
         chain: cfg.chain,
@@ -321,6 +327,7 @@ export async function receiveMessageOnEvm(args: {
         abi: messageTransmitterV2Abi,
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],
+        ...(await feeOverrides(args.chainId)),
     });
     await waitForSuccess(args.chainId, hash, 'Mint');
     return hash;
