@@ -21,6 +21,21 @@ import type { EvmWallet } from './wallet';
 export const tokenMessengerV2Abi = [
     {
         type: 'function',
+        name: 'depositForBurn',
+        stateMutability: 'nonpayable',
+        inputs: [
+            { name: 'amount', type: 'uint256' },
+            { name: 'destinationDomain', type: 'uint32' },
+            { name: 'mintRecipient', type: 'bytes32' },
+            { name: 'burnToken', type: 'address' },
+            { name: 'destinationCaller', type: 'bytes32' },
+            { name: 'maxFee', type: 'uint256' },
+            { name: 'minFinalityThreshold', type: 'uint32' },
+        ],
+        outputs: [],
+    },
+    {
+        type: 'function',
         name: 'depositForBurnWithHook',
         stateMutability: 'nonpayable',
         inputs: [
@@ -55,6 +70,48 @@ export const messageTransmitterV2Abi = [
 // fund safety rules live in exactly one place (src/lib/adapters).
 type EngineMintTarget = import('../adapters/types').MintTarget;
 
+// Which TokenMessengerV2 entry point a target needs. Circle's contract has
+// two: plain depositForBurn, and depositForBurnWithHook whose first line
+// REJECTS empty hook data. Stellar bound burns always carry the forwarder
+// payload, so the hook variant is right for them; every other destination
+// has no hook data and must use the plain call (an EVM to EVM burn once
+// reverted on chain with "Hook data is empty" for exactly this reason).
+export type BurnCall =
+    | {
+          functionName: 'depositForBurn';
+          args: readonly [bigint, number, Hex, `0x${string}`, Hex, bigint, number];
+      }
+    | {
+          functionName: 'depositForBurnWithHook';
+          args: readonly [bigint, number, Hex, `0x${string}`, Hex, bigint, number, Hex];
+      };
+
+export function burnCall(
+    usdc: `0x${string}`,
+    amount: bigint,
+    destinationDomain: number,
+    target: EngineMintTarget,
+    maxFee: bigint,
+    finalityThreshold: number,
+): BurnCall {
+    const common = [
+        amount,
+        destinationDomain,
+        toHex(target.mintRecipient),
+        usdc,
+        toHex(target.destinationCaller),
+        maxFee,
+        finalityThreshold,
+    ] as const;
+    if (target.hookData && target.hookData.length > 0) {
+        return {
+            functionName: 'depositForBurnWithHook',
+            args: [...common, toHex(target.hookData)] as const,
+        };
+    }
+    return { functionName: 'depositForBurn', args: common };
+}
+
 function targetToArgs(
     chainId: EvmChainId,
     amount: bigint,
@@ -66,16 +123,7 @@ function targetToArgs(
     const cfg = EVM_CHAINS[chainId];
     return {
         cfg,
-        burnArgs: [
-            amount,
-            destinationDomain,
-            toHex(target.mintRecipient),
-            cfg.usdc,
-            toHex(target.destinationCaller),
-            maxFee,
-            finalityThreshold,
-            target.hookData ? toHex(target.hookData) : ('0x' as Hex),
-        ] as const,
+        call: burnCall(cfg.usdc, amount, destinationDomain, target, maxFee, finalityThreshold),
     };
 }
 
@@ -88,7 +136,7 @@ export async function evmBurnToTarget(args: {
     maxFee: bigint;
     finalityThreshold: number;
 }): Promise<`0x${string}`> {
-    const { cfg, burnArgs } = targetToArgs(
+    const { cfg, call } = targetToArgs(
         args.chainId,
         args.amount,
         args.destinationDomain,
@@ -96,14 +144,42 @@ export async function evmBurnToTarget(args: {
         args.maxFee,
         args.finalityThreshold,
     );
-    const hash = await args.wallet.walletClient.writeContract({
+    // Simulate on our own RPC first: a burn that would revert must never
+    // reach the wallet, where failed estimation still lets the user sign a
+    // doomed transaction and pay for the revert. The two branches are
+    // identical apart from the entry point; viem needs them spelled out.
+    const base = {
         account: args.wallet.address,
-        chain: cfg.chain,
         address: cfg.tokenMessenger,
         abi: tokenMessengerV2Abi,
-        functionName: 'depositForBurnWithHook',
-        args: burnArgs,
-    });
+    } as const;
+    const client = getPublicClient(args.chainId);
+    let hash: `0x${string}`;
+    if (call.functionName === 'depositForBurnWithHook') {
+        await client.simulateContract({
+            ...base,
+            functionName: call.functionName,
+            args: call.args,
+        });
+        hash = await args.wallet.walletClient.writeContract({
+            ...base,
+            chain: cfg.chain,
+            functionName: call.functionName,
+            args: call.args,
+        });
+    } else {
+        await client.simulateContract({
+            ...base,
+            functionName: call.functionName,
+            args: call.args,
+        });
+        hash = await args.wallet.walletClient.writeContract({
+            ...base,
+            chain: cfg.chain,
+            functionName: call.functionName,
+            args: call.args,
+        });
+    }
     await waitForSuccess(args.chainId, hash, 'Burn');
     return hash;
 }
@@ -117,7 +193,7 @@ export async function evmSendCallsBurnToTarget(args: {
     maxFee: bigint;
     finalityThreshold: number;
 }): Promise<`0x${string}`> {
-    const { cfg, burnArgs } = targetToArgs(
+    const { cfg, call } = targetToArgs(
         args.chainId,
         args.amount,
         args.destinationDomain,
@@ -130,11 +206,7 @@ export async function evmSendCallsBurnToTarget(args: {
         functionName: 'approve',
         args: [cfg.tokenMessenger, args.amount],
     });
-    const burnData = encodeFunctionData({
-        abi: tokenMessengerV2Abi,
-        functionName: 'depositForBurnWithHook',
-        args: burnArgs,
-    });
+    const burnData = encodeFunctionData({ abi: tokenMessengerV2Abi, ...call });
     const { id } = await args.wallet.walletClient.sendCalls({
         account: args.wallet.address,
         chain: cfg.chain,

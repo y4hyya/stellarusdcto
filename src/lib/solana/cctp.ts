@@ -7,6 +7,7 @@ import {
 } from '@solana/kit';
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
 import {
+    getDepositForBurnInstructionAsync,
     getDepositForBurnWithHookInstructionAsync,
     TOKEN_MESSENGER_MINTER_V2_PROGRAM_ADDRESS,
 } from './generated/token-messenger-minter';
@@ -41,8 +42,9 @@ async function derivePdas(destinationDomain: number) {
 
 // Generalized burn used by the transfer engine: destination and slots come
 // from the destination adapter's MintTarget, so the slot composition rules
-// live in exactly one place (src/lib/adapters). In this app Solana only ever
-// burns toward Stellar, so hookData is always present.
+// live in exactly one place (src/lib/adapters). Stellar bound burns carry the
+// forwarder payload and use the hook instruction; every other destination has
+// no hook data and takes the plain deposit_for_burn (mirrors the EVM rule).
 export async function solanaBurnToTarget(args: {
     wallet: SolanaWallet;
     amount: bigint;
@@ -65,7 +67,7 @@ export async function solanaBurnToTarget(args: {
     const ownerSigner = createNoopSigner(owner);
     const messageSentEventData = await generateKeyPairSigner();
 
-    const instruction = await getDepositForBurnWithHookInstructionAsync({
+    const common = {
         owner: ownerSigner,
         eventRentPayer: ownerSigner,
         burnTokenAccount,
@@ -83,8 +85,12 @@ export async function solanaBurnToTarget(args: {
         destinationCaller: decodeAddress.decode(args.target.destinationCaller),
         maxFee: args.maxFee,
         minFinalityThreshold: args.minFinalityThreshold,
-        hookData: args.target.hookData ?? new Uint8Array(0),
-    });
+    };
+    const hookData = args.target.hookData;
+    const instruction =
+        hookData && hookData.length > 0
+            ? await getDepositForBurnWithHookInstructionAsync({ ...common, hookData })
+            : await getDepositForBurnInstructionAsync(common);
 
     const signature = await signAndSendSolanaTx({
         wallet: args.wallet,
