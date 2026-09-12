@@ -71,13 +71,13 @@
             !evmWallet.onSelectedNetwork) ||
             (sourceFamily === 'stellar' && stellarWallet.wrongNetwork),
     );
-    let connectLabel = $derived(
-        sourceFamily === 'stellar'
+    const connectLabelFor = (family: 'stellar' | 'evm' | 'solana') =>
+        family === 'stellar'
             ? 'Connect Freighter'
-            : sourceFamily === 'evm'
+            : family === 'evm'
               ? 'Connect wallet'
-              : 'Connect Phantom',
-    );
+              : 'Connect Phantom';
+    let connectLabel = $derived(connectLabelFor(sourceFamily));
     // On chains whose gas token IS USDC (Arc), a burn of the full balance
     // reverts on chain because gas comes out of the same pool. Hold back a
     // little from Max and from the send gate.
@@ -120,6 +120,15 @@
               : (solanaWallet.state.wallet?.address ?? null),
     );
 
+    // The mint is a transaction somebody has to sign on the destination chain,
+    // so that wallet is required before the burn, not after it. It need not be
+    // the recipient's wallet: destinationCaller stays zero, so anyone can
+    // complete the transfer. A forwarded burn is the exception, Circle's
+    // relayer submits that mint and no user transaction is involved.
+    let destConnected = $derived(destAutoAddress !== null);
+    let destConnectLabel = $derived(connectLabelFor(destFamily));
+    let destWalletNeeded = $derived(flow !== 'forwarded');
+
     let parsed = $derived.by(() => {
         const text = amount.trim();
         if (text === '') return { amount6: null, error: null };
@@ -145,6 +154,9 @@
             sourceConnected,
             connectLabel,
             wrongNetwork,
+            destWalletNeeded,
+            destConnected,
+            destConnectLabel,
             amountText: amount,
             amountError: parsed.error,
             amount6: parsed.amount6,
@@ -170,6 +182,7 @@
 
     async function ctaClick() {
         if (cta.kind === 'connect-source') return connectSource();
+        if (cta.kind === 'connect-dest') return connectDest();
         if (cta.kind === 'switch-network') {
             // EVM wallets can be switched programmatically; Freighter's
             // network lives in the extension, so a click just re reads it.
@@ -310,13 +323,7 @@
             <div class="side-head">
                 <span class="side-label">To</span>
                 {#if destAutoAddress === null}
-                    <button class="mini connect" onclick={connectDest}>
-                        Connect {destFamily === 'stellar'
-                            ? 'Freighter'
-                            : destFamily === 'evm'
-                              ? 'wallet'
-                              : 'Phantom'}
-                    </button>
+                    <button class="mini connect" onclick={connectDest}>{destConnectLabel}</button>
                 {/if}
             </div>
             <div class="side-row">

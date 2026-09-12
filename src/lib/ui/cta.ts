@@ -10,6 +10,16 @@ export type CtaInput = {
     /** Connect copy for the source family, e.g. "Connect Freighter". */
     connectLabel: string;
     wrongNetwork: boolean;
+    /**
+     * Whether finishing this transfer needs a wallet on the destination side.
+     * True for every ordinary route: CCTP mints nothing on its own and the
+     * caller pays that fee. False only when Circle's forwarding service is
+     * carrying the mint, where no user transaction is involved.
+     */
+    destWalletNeeded: boolean;
+    destConnected: boolean;
+    /** Connect copy for the destination family, e.g. "Connect Phantom". */
+    destConnectLabel: string;
     amountText: string;
     /** Plain message when the amount fails to parse, otherwise null. */
     amountError: string | null;
@@ -33,6 +43,7 @@ export type Cta = {
         | 'busy'
         | 'connect-source'
         | 'switch-network'
+        | 'connect-dest'
         | 'enter-amount'
         | 'fix-amount'
         | 'insufficient'
@@ -53,6 +64,16 @@ export function resolveCta(input: CtaInput): Cta {
     }
     if (input.wrongNetwork) {
         return { kind: 'switch-network', label: 'Switch network', enabled: true };
+    }
+    // Ask for the destination wallet before anything is burned, not after.
+    // It does not have to belong to the recipient, so the label says what it
+    // is for instead of implying ownership.
+    if (input.destWalletNeeded && !input.destConnected) {
+        return {
+            kind: 'connect-dest',
+            label: `${input.destConnectLabel} to finish on ${input.destLabel}`,
+            enabled: true,
+        };
     }
     if (input.amountText.trim() === '') {
         return { kind: 'enter-amount', label: 'Enter an amount', enabled: false };

@@ -6,6 +6,9 @@ const base: CtaInput = {
     sourceConnected: true,
     connectLabel: 'Connect Freighter',
     wrongNetwork: false,
+    destWalletNeeded: true,
+    destConnected: true,
+    destConnectLabel: 'Connect wallet',
     amountText: '25',
     amountError: null,
     amount6: 25_000_000n,
@@ -87,5 +90,40 @@ describe('resolveCta', () => {
         const checking = resolveCta({ ...base, recipientState: 'checking' });
         expect(checking.kind).toBe('checking');
         expect(checking.enabled).toBe(false);
+    });
+
+    // The mint is a transaction on the destination chain. Asking for that
+    // wallet only after the burn is what stranded real transfers: the USDC was
+    // already gone, and the step could not run.
+    test('the destination wallet is demanded before the burn, not after', () => {
+        const cta = resolveCta({
+            ...base,
+            destConnected: false,
+            destConnectLabel: 'Connect Phantom',
+        });
+        expect(cta.kind).toBe('connect-dest');
+        expect(cta.enabled).toBe(true);
+        expect(cta.label).toBe('Connect Phantom to finish on Base Sepolia');
+    });
+
+    test('it outranks the amount and recipient rungs, and yields to the source wallet', () => {
+        const nothingEntered = {
+            ...base,
+            destConnected: false,
+            amountText: '',
+            amount6: null,
+            recipientState: 'empty' as const,
+        };
+        expect(resolveCta(nothingEntered).kind).toBe('connect-dest');
+        expect(resolveCta({ ...nothingEntered, sourceConnected: false }).kind).toBe(
+            'connect-source',
+        );
+        expect(resolveCta({ ...nothingEntered, wrongNetwork: true }).kind).toBe('switch-network');
+    });
+
+    test("a forwarded burn never asks, Circle's relayer submits that mint", () => {
+        const cta = resolveCta({ ...base, destWalletNeeded: false, destConnected: false });
+        expect(cta.kind).toBe('send');
+        expect(cta.enabled).toBe(true);
     });
 });
