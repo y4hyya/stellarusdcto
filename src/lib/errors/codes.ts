@@ -11,6 +11,8 @@ export type TransferErrorCode =
     | 'TRUSTLINE_FULL'
     | 'TRUSTLINE_FROZEN'
     | 'ACCOUNT_NOT_FOUND'
+    | 'DESTINATION_ACCOUNT_MISSING'
+    | 'MINT_RECIPIENT_UNUSABLE'
     | 'ALLOWANCE_EXPIRED'
     | 'ALREADY_MINTED'
     | 'ATTESTATION_PENDING'
@@ -74,6 +76,18 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         userMessage: 'This Stellar account does not exist on the network yet.',
         action: 'Fund the account with XLM first (any wallet or exchange can send XLM to create it), then try again.',
         retryable: true,
+    },
+    DESTINATION_ACCOUNT_MISSING: {
+        userMessage:
+            'The Solana account this transfer was sent to has no USDC token account yet, and the connected wallet is not allowed to create it.',
+        action: 'Connect the recipient wallet and retry, or have its owner receive any USDC once. Nothing is lost, the transfer stays completable by anyone.',
+        retryable: true,
+    },
+    MINT_RECIPIENT_UNUSABLE: {
+        userMessage:
+            'This transfer was addressed to an account that cannot hold USDC, so the mint can never be completed.',
+        action: 'Nothing in this app can release it. Keep the burn transaction hash and take it to Circle support.',
+        retryable: false,
     },
     ALLOWANCE_EXPIRED: {
         userMessage: 'The USDC spending approval expired before the burn ran.',
