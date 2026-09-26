@@ -161,9 +161,6 @@
             <code>wallet_sendCalls</code>.
             {#if sendCallsCap.atomic}
                 Your wallet reports <strong>atomic</strong> execution, so this lands as one on-chain transaction.
-            {:else if sendCallsCap.supported}
-                Your wallet reports <strong>sequential</strong> execution, so you get one prompt and two
-                on-chain transactions.
             {:else}
                 Your wallet doesn't advertise this capability on this chain, so your mileage may
                 vary.
@@ -180,12 +177,8 @@
         <details class="signed-block" open>
             <summary>
                 wallet_sendCalls bundle
-                <span class="badge {sendCallsCap.atomic ? 'atomic' : 'sequential'}">
-                    {sendCallsCap.atomic
-                        ? 'atomic'
-                        : sendCallsCap.supported
-                          ? 'sequential'
-                          : 'unsupported'}
+                <span class="badge {sendCallsCap.atomic ? 'atomic' : 'unsupported'}">
+                    {sendCallsCap.atomic ? 'atomic' : 'unsupported'}
                 </span>
             </summary>
             <div class="signed-body">
@@ -473,7 +466,7 @@
         color: var(--success);
     }
 
-    .badge.sequential {
+    .badge.unsupported {
         background: color-mix(in srgb, var(--warning) 18%, transparent);
         color: var(--warning);
     }
