@@ -20,6 +20,7 @@ export type TransferErrorCode =
     | 'IRIS_RATE_LIMITED'
     | 'MAX_FEE_TOO_LOW'
     | 'GAS_BID_TOO_LOW'
+    | 'GAS_LIMIT_REFUSED'
     | 'AMOUNT_INVALID'
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
@@ -124,6 +125,12 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
         userMessage:
             'The network gas price moved above what the wallet offered before the transaction was accepted. Nothing was sent and nothing was charged.',
         action: 'Retry the step. A fresh bid is made at the current price with headroom, and the unused part of a bid is never charged.',
+        retryable: true,
+    },
+    GAS_LIMIT_REFUSED: {
+        userMessage:
+            'Your wallet could not estimate this transaction and fell back to a gas limit the network refuses. Nothing was sent and nothing was charged.',
+        action: "Retry the step. If it happens again, switch this network's RPC in your wallet settings to the chain's official one, then retry.",
         retryable: true,
     },
     AMOUNT_INVALID: {

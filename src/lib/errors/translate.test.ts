@@ -85,6 +85,32 @@ describe('translateError', () => {
         ).toBe('UNKNOWN');
     });
 
+    test('maps a gas limit the network refused at submission', () => {
+        // The wallet could not estimate a batch on Unichain Sepolia, guessed
+        // 21,000,000 gas, and the node refused anything above 16,777,216.
+        const unichain = new Error(
+            'An internal error was received.\n\n' +
+                'Request Arguments:\n' +
+                '  chain:  Unichain Sepolia (id: 1301)\n' +
+                '  from:   0xfdea5ebbe7970a00792562e1c5299215cf6a3813\n\n' +
+                'Details: RPC 0x515 Custom eth_sendRawTransaction: gas limit too high\n' +
+                'Version: viem@2.55.10',
+        );
+        expect(translateError(unichain, { family: 'evm', phase: 'burn' }).code).toBe(
+            'GAS_LIMIT_REFUSED',
+        );
+        // How Sepolia, Linea, and a node past its block limit word the same refusal.
+        for (const text of [
+            'transaction gas limit too high (cap: 16777216, tx: 21000000)',
+            'Transaction gas limit cap exceeded',
+            'exceeds block gas limit',
+        ]) {
+            expect(translateError(new Error(text), { family: 'evm' }).code, text).toBe(
+                'GAS_LIMIT_REFUSED',
+            );
+        }
+    });
+
     test('keeps the raw text behind UNKNOWN for anything else', () => {
         const raw = new Error('some inscrutable failure');
         const translated = translateError(raw, {});

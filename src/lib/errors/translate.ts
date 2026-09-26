@@ -60,6 +60,18 @@ export function translateError(raw: unknown, ctx: TranslateContext): TransferErr
         return new TransferError('GAS_BID_TOO_LOW', { raw });
     }
 
+    // A wallet that cannot estimate a transaction guesses a gas limit instead
+    // (MetaMask takes 35% of the block gas limit), and the node refuses one
+    // above its per transaction cap (EIP 7825: 16,777,216) or the block limit
+    // at submission, before anything is sent.
+    if (
+        lower.includes('gas limit too high') ||
+        lower.includes('gas limit cap exceeded') ||
+        lower.includes('exceeds block gas limit')
+    ) {
+        return new TransferError('GAS_LIMIT_REFUSED', { raw });
+    }
+
     if (ctx.family === 'stellar') {
         if (msg.includes('Error(Contract, #9)')) {
             return new TransferError('ALLOWANCE_EXPIRED', { raw });
