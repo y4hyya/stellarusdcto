@@ -246,7 +246,7 @@
     );
 </script>
 
-<section class="card glass" aria-label="Transfer USDC">
+<section class="card" class:glass={engine.state.phase === 'idle'} aria-label="Transfer USDC">
     {#if engine.state.phase === 'idle'}
         <div class="side">
             <div class="side-head">
@@ -451,8 +451,13 @@
         width: 100%;
         max-width: 30rem;
         margin: 0 auto;
-        padding: 1.25rem;
         border-radius: var(--radius-lg);
+    }
+
+    /* Only the form gets the card layer. The progress view is its own glass
+       card, so it sits straight on the wallpaper instead of inside a second one. */
+    .card.glass {
+        padding: 1.25rem;
     }
 
     .side {
@@ -588,7 +593,10 @@
         opacity: 0.9;
     }
 
+    /* Sits on the wallpaper with no card behind it, so it carries its own blur. */
     .cta.secondary {
+        -webkit-backdrop-filter: var(--glass-blur);
+        backdrop-filter: var(--glass-blur);
         background: var(--bg-elev-2);
         color: var(--text);
         border: 1px solid var(--border-strong);
