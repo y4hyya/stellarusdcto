@@ -4,6 +4,8 @@ import {
     generateKeyPairSigner,
     getAddressDecoder,
     getProgramDerivedAddress,
+    type Instruction,
+    type TransactionSigner,
 } from '@solana/kit';
 import { findAssociatedTokenPda, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token';
 import {
@@ -12,6 +14,8 @@ import {
     TOKEN_MESSENGER_MINTER_V2_PROGRAM_ADDRESS,
 } from './generated/token-messenger-minter';
 import { signAndSendSolanaTx } from './signer';
+import { tagMemoInstruction } from './tag';
+import { tagEnabled } from '../attribution/tag';
 import { SOLANA } from '$lib/config';
 import type { SolanaWallet } from './wallet';
 
@@ -40,36 +44,40 @@ async function derivePdas(destinationDomain: number) {
     return { tokenMessenger, tokenMinter, remoteTokenMessenger, messageTransmitter };
 }
 
-// Generalized burn used by the transfer engine: destination and slots come
-// from the destination adapter's MintTarget, so the slot composition rules
-// live in exactly one place (src/lib/adapters). Stellar bound burns carry the
-// forwarder payload and use the hook instruction; every other destination has
-// no hook data and takes the plain deposit_for_burn (mirrors the EVM rule).
-export async function solanaBurnToTarget(args: {
-    wallet: SolanaWallet;
+// The burn instruction itself, built from the destination adapter's
+// MintTarget so the slot composition rules live in exactly one place
+// (src/lib/adapters). Stellar bound burns carry the forwarder payload and use
+// the hook instruction; every other destination has no hook data and takes
+// the plain deposit_for_burn (mirrors the EVM rule). No RPC is touched here:
+// every account is derived, which is what lets the size of the real
+// transaction be tested.
+//
+// The owner arrives as a signer, not an address: the same signer object must
+// also be the fee payer, because a transaction cannot carry two different
+// signers for one address.
+export async function buildBurnInstruction(args: {
+    ownerSigner: TransactionSigner;
     amount: bigint;
     destinationDomain: number;
     target: import('$lib/adapters/types').MintTarget;
     maxFee: bigint;
     minFinalityThreshold: number;
-}): Promise<{ signature: string }> {
-    const owner = address(args.wallet.address);
+}): Promise<Instruction> {
     const mint = address(SOLANA.usdc.mint);
     const decodeAddress = getAddressDecoder();
 
     const [burnTokenAccount] = await findAssociatedTokenPda({
-        owner,
+        owner: args.ownerSigner.address,
         tokenProgram: TOKEN_PROGRAM_ADDRESS,
         mint,
     });
 
     const pdas = await derivePdas(args.destinationDomain);
-    const ownerSigner = createNoopSigner(owner);
     const messageSentEventData = await generateKeyPairSigner();
 
     const common = {
-        owner: ownerSigner,
-        eventRentPayer: ownerSigner,
+        owner: args.ownerSigner,
+        eventRentPayer: args.ownerSigner,
         burnTokenAccount,
         burnTokenMint: mint,
         messageSentEventData,
@@ -87,14 +95,35 @@ export async function solanaBurnToTarget(args: {
         minFinalityThreshold: args.minFinalityThreshold,
     };
     const hookData = args.target.hookData;
-    const instruction =
-        hookData && hookData.length > 0
-            ? await getDepositForBurnWithHookInstructionAsync({ ...common, hookData })
-            : await getDepositForBurnInstructionAsync(common);
+    return hookData && hookData.length > 0
+        ? await getDepositForBurnWithHookInstructionAsync({ ...common, hookData })
+        : await getDepositForBurnInstructionAsync(common);
+}
+
+// Generalized burn used by the transfer engine.
+export async function solanaBurnToTarget(args: {
+    wallet: SolanaWallet;
+    amount: bigint;
+    destinationDomain: number;
+    target: import('$lib/adapters/types').MintTarget;
+    maxFee: bigint;
+    minFinalityThreshold: number;
+}): Promise<{ signature: string }> {
+    const ownerSigner = createNoopSigner(address(args.wallet.address));
+    const instruction = await buildBurnInstruction({
+        ownerSigner,
+        amount: args.amount,
+        destinationDomain: args.destinationDomain,
+        target: args.target,
+        maxFee: args.maxFee,
+        minFinalityThreshold: args.minFinalityThreshold,
+    });
 
     const signature = await signAndSendSolanaTx({
         wallet: args.wallet,
         instructions: [instruction],
+        // The public usage tag, dropped by the signer if it would not fit.
+        optionalInstructions: tagEnabled() ? [tagMemoInstruction()] : undefined,
         feePayerSigner: ownerSigner,
     });
     return { signature };
