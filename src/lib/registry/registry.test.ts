@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest';
+import { isAddress } from 'viem';
 import { TransferError } from '../errors/codes';
 import { TESTNET, MAINNET } from './index';
 import { getChain, chainByDomain } from './index';
@@ -174,5 +175,21 @@ describe('registry accessors', () => {
         expect(typeof base === 'object' && base.id).toBe('base');
         expect(chainByDomain(27)).toBe('stellar');
         expect(chainByDomain(999)).toBeUndefined();
+    });
+});
+
+describe('EVM addresses are usable by the wallet library', () => {
+    // A mixed case address must carry its exact EIP-55 checksum or viem
+    // refuses to encode it, which fails every burn from that chain before the
+    // wallet opens. The address pattern above cannot see a wrong letter case.
+    test('every token and contract address passes the strict checksum check', () => {
+        eachRegistry((r) => {
+            for (const c of r.chains) {
+                if (c.family !== 'evm') continue;
+                for (const key of ['usdc', 'tokenMessenger', 'messageTransmitter'] as const) {
+                    expect(isAddress(c[key]), `${r.env} ${c.id}.${key} ${c[key]}`).toBe(true);
+                }
+            }
+        });
     });
 });

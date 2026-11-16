@@ -226,7 +226,7 @@ export const MAINNET: Registry = {
             label: 'World Chain',
             domain: 14,
             chain: worldchain,
-            usdc: '0x79A02482A880bCe3F13E09da970dC34dB4cD24D1',
+            usdc: '0x79A02482A880bCE3F13e09Da970dC34db4CD24d1',
             accent: '#8E97A8',
             attestationEtaMs: 19 * MIN,
             fastSource: true,
