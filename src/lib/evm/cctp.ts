@@ -1,7 +1,8 @@
-import { encodeFunctionData, erc20Abi, toHex, type Hex } from 'viem';
+import { concat, encodeFunctionData, erc20Abi, toHex, type Hex } from 'viem';
 import { EVM_CHAINS, type EvmChainId } from '$lib/config';
 import { getPublicClient } from './client';
 import { feeOverrides } from './fees';
+import { evmTagSuffix } from './tag';
 import type { EvmWallet } from './wallet';
 
 // ─────────────────────────────────────────────────────────────────────
@@ -155,19 +156,11 @@ export async function evmBurnToTarget(args: {
         abi: tokenMessengerV2Abi,
     } as const;
     const client = getPublicClient(args.chainId);
-    let hash: `0x${string}`;
     if (call.functionName === 'depositForBurnWithHook') {
         await client.simulateContract({
             ...base,
             functionName: call.functionName,
             args: call.args,
-        });
-        hash = await args.wallet.walletClient.writeContract({
-            ...base,
-            chain: cfg.chain,
-            functionName: call.functionName,
-            args: call.args,
-            ...(await feeOverrides(args.chainId)),
         });
     } else {
         await client.simulateContract({
@@ -175,12 +168,36 @@ export async function evmBurnToTarget(args: {
             functionName: call.functionName,
             args: call.args,
         });
+    }
+    // The public usage tag: bytes after the arguments, only when simulating
+    // the call both ways shows they change nothing (see ./tag.ts). The
+    // simulation above stays untagged so a doomed burn is refused for the
+    // same reasons, with the same messages, as before the tag existed.
+    const dataSuffix = await evmTagSuffix({
+        client,
+        account: args.wallet.address,
+        to: cfg.tokenMessenger,
+        data: encodeFunctionData({ abi: tokenMessengerV2Abi, ...call }),
+    });
+    const fees = await feeOverrides(args.chainId);
+    let hash: `0x${string}`;
+    if (call.functionName === 'depositForBurnWithHook') {
         hash = await args.wallet.walletClient.writeContract({
             ...base,
             chain: cfg.chain,
             functionName: call.functionName,
             args: call.args,
-            ...(await feeOverrides(args.chainId)),
+            dataSuffix,
+            ...fees,
+        });
+    } else {
+        hash = await args.wallet.walletClient.writeContract({
+            ...base,
+            chain: cfg.chain,
+            functionName: call.functionName,
+            args: call.args,
+            dataSuffix,
+            ...fees,
         });
     }
     await waitForSuccess(args.chainId, hash, 'Burn');
@@ -210,12 +227,21 @@ export async function evmSendCallsBurnToTarget(args: {
         args: [cfg.tokenMessenger, args.amount],
     });
     const burnData = encodeFunctionData({ abi: tokenMessengerV2Abi, ...call });
+    // The usage tag goes on the burn call only, never on the USDC approve.
+    // With no allowance yet both simulations revert inside the token
+    // transfer; the gate accepts that only when the revert data is identical.
+    const suffix = await evmTagSuffix({
+        client: getPublicClient(args.chainId),
+        account: args.wallet.address,
+        to: cfg.tokenMessenger,
+        data: burnData,
+    });
     const { id } = await args.wallet.walletClient.sendCalls({
         account: args.wallet.address,
         chain: cfg.chain,
         calls: [
             { to: cfg.usdc, data: approveData },
-            { to: cfg.tokenMessenger, data: burnData },
+            { to: cfg.tokenMessenger, data: suffix ? concat([burnData, suffix]) : burnData },
         ],
     });
     const status = await args.wallet.walletClient.waitForCallsStatus({ id });
@@ -310,12 +336,24 @@ export async function receiveMessageOnEvm(args: {
     // transaction. When estimation fails inside a wallet it substitutes a
     // huge fallback gas limit and still lets the user sign the doomed tx;
     // failing here turns that into a clean error instead.
-    await getPublicClient(args.chainId).simulateContract({
+    const client = getPublicClient(args.chainId);
+    await client.simulateContract({
         account: args.wallet.address,
         address: cfg.messageTransmitter,
         abi: messageTransmitterV2Abi,
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],
+    });
+    // The public usage tag, under the same both ways simulation as the burn.
+    const dataSuffix = await evmTagSuffix({
+        client,
+        account: args.wallet.address,
+        to: cfg.messageTransmitter,
+        data: encodeFunctionData({
+            abi: messageTransmitterV2Abi,
+            functionName: 'receiveMessage',
+            args: [args.message, args.attestation],
+        }),
     });
     // Bid the gas cap ourselves (see fees.ts): left to the wallet, a mint to
     // an Arbitrum style chain is refused whenever the base fee ticks up
@@ -327,6 +365,7 @@ export async function receiveMessageOnEvm(args: {
         abi: messageTransmitterV2Abi,
         functionName: 'receiveMessage',
         args: [args.message, args.attestation],
+        dataSuffix,
         ...(await feeOverrides(args.chainId)),
     });
     await waitForSuccess(args.chainId, hash, 'Mint');
