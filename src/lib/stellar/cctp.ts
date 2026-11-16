@@ -10,7 +10,7 @@ import {
 } from '@stellar/stellar-sdk';
 import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
-import { simulateSignAndSubmit } from './tx';
+import { contractCallBuilder, simulateSignAndSubmitTagged } from './tx';
 import { inclusionFee } from './fees';
 
 const tmm = new Contract(STELLAR.contracts.tokenMessengerMinter);
@@ -53,21 +53,20 @@ export async function mintAndForward(args: {
 }): Promise<{ hash: string }> {
     const account = await stellarRpc.getAccount(args.caller);
 
-    const tx = new TransactionBuilder(account, {
-        fee: await inclusionFee(),
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(
-            forwarder.call(
+    // Carries the public usage tag when it is on (see ./tx.ts).
+    const hash = await simulateSignAndSubmitTagged(
+        contractCallBuilder({
+            caller: args.caller,
+            sequence: account.sequenceNumber(),
+            fee: await inclusionFee(),
+            networkPassphrase: STELLAR.networkPassphrase,
+            operation: forwarder.call(
                 'mint_and_forward',
                 nativeToScVal(args.message, { type: 'bytes' }),
                 nativeToScVal(args.attestation, { type: 'bytes' }),
             ),
-        )
-        .setTimeout(180)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
+        }),
+    );
     return { hash };
 }
 
@@ -104,15 +103,16 @@ export async function stellarDepositForBurn(args: {
           )
         : tmm.call('deposit_for_burn', ...common);
 
-    const tx = new TransactionBuilder(account, {
-        fee: await inclusionFee(),
-        networkPassphrase: STELLAR.networkPassphrase,
-    })
-        .addOperation(operation)
-        .setTimeout(180)
-        .build();
-
-    const hash = await simulateSignAndSubmit(tx);
+    // Carries the public usage tag when it is on (see ./tx.ts).
+    const hash = await simulateSignAndSubmitTagged(
+        contractCallBuilder({
+            caller: args.caller,
+            sequence: account.sequenceNumber(),
+            fee: await inclusionFee(),
+            networkPassphrase: STELLAR.networkPassphrase,
+            operation,
+        }),
+    );
     return { hash, sourceDomain: STELLAR.domain };
 }
 

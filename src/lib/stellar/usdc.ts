@@ -11,8 +11,9 @@ import {
 } from '@stellar/stellar-sdk';
 import { STELLAR } from '$lib/config';
 import { stellarRpc } from './client';
-import { signAndSubmitClassic, simulateSignAndSubmit } from './tx';
+import { signAndSubmitClassic, simulateSignAndSubmit, stellarTimebounds } from './tx';
 import { inclusionFee } from './fees';
+import { STELLAR_TAG_MIN_TIME, tagEnabled } from '../attribution/tag';
 
 const usdc = new Contract(STELLAR.contracts.usdc);
 
@@ -120,16 +121,24 @@ export function parseUsdcStellar(value: string): bigint {
 // carry the 0.5 XLM trustline reserve.
 export async function addUsdcTrustline(caller: string): Promise<string> {
     const account = await stellarRpc.getAccount(caller);
-    const tx = new TransactionBuilder(account, {
-        fee: await inclusionFee(),
+    const tx = trustlineTx({ account, fee: await inclusionFee(), tagged: tagEnabled() });
+    return signAndSubmitClassic(tx);
+}
+
+// The trustline transaction on its own. When tagged, its lower time bound is
+// the public usage tag (a fixed time in the past, see ./tx.ts), so trustlines
+// opened here can be counted later. Time bounds are ordinary on classic
+// transactions, so there is no second path to fall back to.
+export function trustlineTx(args: { account: Account; fee: string; tagged: boolean }) {
+    return new TransactionBuilder(args.account, {
+        fee: args.fee,
         networkPassphrase: STELLAR.networkPassphrase,
+        timebounds: stellarTimebounds(args.tagged ? STELLAR_TAG_MIN_TIME : 0),
     })
         .addOperation(
             Operation.changeTrust({
                 asset: new Asset(STELLAR.usdc.code, STELLAR.usdc.issuer),
             }),
         )
-        .setTimeout(180)
         .build();
-    return signAndSubmitClassic(tx);
 }
