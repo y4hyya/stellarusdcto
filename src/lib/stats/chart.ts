@@ -9,7 +9,9 @@ export function usdc(amount6: string): number {
 
 /** The smallest of 1, 2 or 5 times a power of ten that is at or above `value`. */
 export function niceCeil(value: number): number {
-    if (!(value > 0)) return 1;
+    // Infinity would never leave the loop below; NaN and nothing both mean
+    // "no data".
+    if (!Number.isFinite(value) || value <= 0) return 1;
     let base = 1;
     while (base * 10 <= value) base *= 10;
     while (base > value) base /= 10;

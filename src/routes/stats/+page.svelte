@@ -5,6 +5,7 @@
     import { MAINNET } from '$lib/registry';
     import { usdc } from '$lib/stats/chart';
     import { chainLabel, formatUsdc6, parseStats } from '$lib/stats/format';
+    import { explorerUrlFor } from '$lib/stats/links';
     import { STATS_DATA_URL, STATS_SCRIPT_URL, STATS_URL } from '$lib/stats/source';
     import type { ChainCoverage, Stats } from '$lib/stats/types';
 
@@ -14,6 +15,9 @@
     const labels: Record<string, string> = { stellar: 'Stellar' };
     for (const chain of MAINNET.chains) labels[chain.id] = chain.label;
     const name = (id: string) => chainLabel(id, labels);
+    // Explorer links are built here from the registry. The file names a chain
+    // and a transaction; where a link leads is never taken from it.
+    const linkFor = explorerUrlFor(MAINNET);
 
     type View =
         { status: 'loading' } | { status: 'unavailable' } | { status: 'ready'; stats: Stats };
@@ -89,6 +93,238 @@
     </li>
 {/snippet}
 
+{#snippet unavailableCard()}
+    <section class="card glass notice" aria-live="polite">
+        <h2 class="card-title">The numbers could not be loaded.</h2>
+        <p>
+            They are published as a file once a day. It may not exist yet, or it could not be
+            reached just now. Nothing about transfers depends on it.
+        </p>
+        <div class="actions">
+            <button class="retry" onclick={load}>Try again</button>
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
+            <a href={STATS_DATA_URL} target="_blank" rel="noreferrer">See the published data</a>
+        </div>
+    </section>
+{/snippet}
+
+{#snippet ready(stats: Stats)}
+    {@const t = stats.totals}
+    {@const chart = stats.daily.slice(-CHART_DAYS)}
+    {@const routes = stats.routes.slice(0, ROUTES_SHOWN)}
+    {@const widest = Math.max(1, ...routes.map((r) => usdc(r.volume)))}
+    {@const current = stats.coverage.filter((c) => c.status === 'ok').length}
+    {@const lagging = stats.coverage.filter((c) => c.status !== 'ok')}
+
+    <section class="kpis" aria-label="Totals">
+        <div class="kpi glass">
+            <span class="kpi-label">Transfers</span>
+            <span class="kpi-value">{count(t.transfers)}</span>
+            <span class="kpi-note">started here</span>
+        </div>
+        <div class="kpi glass">
+            <span class="kpi-label">Volume</span>
+            <span class="kpi-value" title="{formatUsdc6(t.volume)} USDC">
+                {formatUsdc6(t.volume, { compact: true })}
+            </span>
+            <span class="kpi-note">USDC</span>
+        </div>
+        <div class="kpi glass">
+            <span class="kpi-label">Wallets</span>
+            <span class="kpi-value">{count(t.wallets)}</span>
+            <span class="kpi-note">
+                {t.walletsByFamily.evm} EVM · {t.walletsByFamily.solana} Solana · {t.walletsByFamily
+                    .stellar} Stellar
+            </span>
+        </div>
+        <div class="kpi glass">
+            <span class="kpi-label">Rescues</span>
+            <span class="kpi-value">{count(t.rescues)}</span>
+            <span class="kpi-note">
+                {formatUsdc6(t.rescuedVolume, { compact: true })} USDC finished here
+            </span>
+        </div>
+    </section>
+
+    {#if t.transfers === 0}
+        <section class="card glass notice">
+            <h2 class="card-title">Nothing counted yet.</h2>
+            <p>
+                Counting starts with the first mainnet transfer that carries the tag. Transfers made
+                before {day(stats.since)} carry no tag and cannot be counted afterwards.
+            </p>
+        </section>
+    {:else}
+        <section class="card glass">
+            <DailyChart daily={chart} />
+        </section>
+
+        <section class="card glass">
+            <h2 class="card-title">Routes</h2>
+            <ul class="routes">
+                {#each routes as route, i (i)}
+                    <li class="route">
+                        <span class="route-name">
+                            {name(route.source)}
+                            <span class="arrow" aria-hidden="true">→</span>
+                            <span class="sr-only">to</span>
+                            {name(route.dest)}
+                        </span>
+                        <span class="route-figure">
+                            {formatUsdc6(route.volume)}
+                            <span class="unit">USDC</span>
+                            <span class="route-count">
+                                {plural(route.transfers, 'transfer', 'transfers')}
+                            </span>
+                        </span>
+                        <span class="route-bar" aria-hidden="true">
+                            <span
+                                class="route-fill"
+                                style:width="{Math.max(1, (usdc(route.volume) / widest) * 100)}%"
+                            ></span>
+                        </span>
+                    </li>
+                {/each}
+            </ul>
+            {#if stats.routes.length > routes.length}
+                <p class="more">
+                    And {plural(stats.routes.length - routes.length, 'more route', 'more routes')} in
+                    the published data.
+                </p>
+            {/if}
+        </section>
+
+        <section class="card glass">
+            <h2 class="card-title">Latest transfers</h2>
+            <ul class="recent">
+                {#each stats.recent as row, i (i)}
+                    {@const url = linkFor(row.source, row.tx)}
+                    <li class="recent-row">
+                        <span class="recent-route">
+                            {name(row.source)}
+                            <span class="arrow" aria-hidden="true">→</span>
+                            <span class="sr-only">to</span>
+                            {name(row.dest)}
+                        </span>
+                        <span class="recent-amount">
+                            {formatUsdc6(row.amount)} <span class="unit">USDC</span>
+                        </span>
+                        <span class="recent-meta">
+                            <time datetime={row.time}>{when(row.time)}</time>
+                            {#if url}
+                                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external explorer link, built from the registry -->
+                                <a href={url} target="_blank" rel="noreferrer" title={row.tx}>
+                                    {shortHash(row.tx)} ↗
+                                </a>
+                            {:else}
+                                <code title={row.tx}>{shortHash(row.tx)}</code>
+                            {/if}
+                        </span>
+                    </li>
+                {/each}
+            </ul>
+        </section>
+    {/if}
+
+    <section class="card glass">
+        <h2 class="card-title">Coverage</h2>
+        <p class="coverage-summary">
+            <span class="status {lagging.length === 0 ? 'ok' : 'behind'}">
+                <span class="mark" aria-hidden="true">{lagging.length === 0 ? '✓' : '…'}</span>
+                {current} of {stats.coverage.length} chains read up to date
+            </span>
+        </p>
+        {#if lagging.length > 0}
+            <p class="coverage-note">
+                Transfers on these chains are missing from the totals until a later run catches them
+                up.
+            </p>
+            <ul class="chain-list">
+                {#each lagging as chain, i (i)}
+                    {@render chainRow(chain)}
+                {/each}
+            </ul>
+        {/if}
+        {#if stats.gaps.length > 0}
+            <div class="holes">
+                <p>
+                    Some history could not be read at all, and cannot be read later because the node
+                    no longer keeps it. Transfers inside these windows may be missing from the
+                    totals.
+                </p>
+                <ul class="hole-list">
+                    {#each stats.gaps as gap, i (i)}
+                        <li>
+                            {name(gap.chain)}:
+                            {gap.from
+                                ? `from ${when(gap.from)} to ${when(gap.to)}`
+                                : `before ${when(gap.to)}`}
+                        </li>
+                    {/each}
+                </ul>
+            </div>
+        {/if}
+        <details class="chains">
+            <summary>
+                {lagging.length > 0
+                    ? `Show the ${current} that are up to date`
+                    : 'Show every chain'}
+            </summary>
+            <ul class="chain-list">
+                {#each stats.coverage.filter((c) => c.status === 'ok') as chain, i (i)}
+                    {@render chainRow(chain)}
+                {/each}
+            </ul>
+        </details>
+    </section>
+
+    <section class="card glass how">
+        <h2 class="card-title">How this is counted</h2>
+        <p>
+            A transfer made here looks like any other CCTP transfer on chain, so each one carries a
+            public tag, <code>{TAG}</code>, that marks it. On EVM chains it is 28 bytes after the
+            call data, which Circle's contracts ignore. On Solana it is a memo next to the burn. On
+            Stellar it is the transaction's "valid after" time, set to a fixed moment in the past.
+        </p>
+        <p>
+            Once a day a script reads public RPCs for every chain, keeps the transactions that carry
+            the tag, and publishes the totals shown here together with the full list of counted
+            transactions. It uses no keys, so anyone can run it and check any transfer on an
+            explorer.
+        </p>
+        <ul class="limits">
+            <li>Counting started on {day(stats.since)}. Earlier transfers carry no tag.</li>
+            <li>
+                Wallets are distinct signing addresses. One person with wallets on two kinds of
+                chain counts twice.
+            </li>
+            <li>
+                A rescue is a transfer finished here that was started somewhere else. Rescues are
+                counted for transfers into Stellar.
+            </li>
+            <li>
+                Anyone can copy the tag, so these are transactions that carry it, not a proof of
+                where they were signed.
+            </li>
+            <li>
+                This page reads one public file from GitHub. The transfer page talks only to chain
+                RPCs and to Circle.
+            </li>
+        </ul>
+        <p class="links">
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
+            <a href={STATS_SCRIPT_URL} target="_blank" rel="noreferrer">The script</a>
+            ·
+            <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
+            <a href={STATS_DATA_URL} target="_blank" rel="noreferrer">The data</a>
+        </p>
+    </section>
+
+    <p class="asof">
+        As of <time datetime={stats.generatedAt}>{when(stats.generatedAt)}</time> · mainnet only
+    </p>
+{/snippet}
+
 <div class="page">
     <header class="hero">
         <h1 class="headline">Usage, counted in public.</h1>
@@ -111,226 +347,17 @@
     {#if view.status === 'loading'}
         <section class="card glass quiet" aria-live="polite">Loading the latest numbers…</section>
     {:else if view.status === 'unavailable'}
-        <section class="card glass notice" aria-live="polite">
-            <h2 class="card-title">The numbers could not be loaded.</h2>
-            <p>
-                They are published as a file once a day. It may not exist yet, or it could not be
-                reached just now. Nothing about transfers depends on it.
-            </p>
-            <div class="actions">
-                <button class="retry" onclick={load}>Try again</button>
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
-                <a href={STATS_DATA_URL} target="_blank" rel="noreferrer">See the published data</a>
-            </div>
-        </section>
+        {@render unavailableCard()}
     {:else}
-        {@const stats = view.stats}
-        {@const t = stats.totals}
-        {@const chart = stats.daily.slice(-CHART_DAYS)}
-        {@const routes = stats.routes.slice(0, ROUTES_SHOWN)}
-        {@const widest = Math.max(1, ...routes.map((r) => usdc(r.volume)))}
-        {@const current = stats.coverage.filter((c) => c.status === 'ok').length}
-        {@const lagging = stats.coverage.filter((c) => c.status !== 'ok')}
-
-        <section class="kpis" aria-label="Totals">
-            <div class="kpi glass">
-                <span class="kpi-label">Transfers</span>
-                <span class="kpi-value">{count(t.transfers)}</span>
-                <span class="kpi-note">started here</span>
-            </div>
-            <div class="kpi glass">
-                <span class="kpi-label">Volume</span>
-                <span class="kpi-value" title="{formatUsdc6(t.volume)} USDC">
-                    {formatUsdc6(t.volume, { compact: true })}
-                </span>
-                <span class="kpi-note">USDC</span>
-            </div>
-            <div class="kpi glass">
-                <span class="kpi-label">Wallets</span>
-                <span class="kpi-value">{count(t.wallets)}</span>
-                <span class="kpi-note">
-                    {t.walletsByFamily.evm} EVM · {t.walletsByFamily.solana} Solana · {t
-                        .walletsByFamily.stellar} Stellar
-                </span>
-            </div>
-            <div class="kpi glass">
-                <span class="kpi-label">Rescues</span>
-                <span class="kpi-value">{count(t.rescues)}</span>
-                <span class="kpi-note">
-                    {formatUsdc6(t.rescuedVolume, { compact: true })} USDC finished here
-                </span>
-            </div>
-        </section>
-
-        {#if t.transfers === 0}
-            <section class="card glass notice">
-                <h2 class="card-title">Nothing counted yet.</h2>
-                <p>
-                    Counting starts with the first mainnet transfer that carries the tag. Transfers
-                    made before {day(stats.since)} carry no tag and cannot be counted afterwards.
-                </p>
-            </section>
-        {:else}
-            <section class="card glass">
-                <DailyChart daily={chart} />
-            </section>
-
-            <section class="card glass">
-                <h2 class="card-title">Routes</h2>
-                <ul class="routes">
-                    {#each routes as route (`${route.source}>${route.dest}`)}
-                        <li class="route">
-                            <span class="route-name">
-                                {name(route.source)}
-                                <span class="arrow" aria-hidden="true">→</span>
-                                <span class="sr-only">to</span>
-                                {name(route.dest)}
-                            </span>
-                            <span class="route-figure">
-                                {formatUsdc6(route.volume)}
-                                <span class="unit">USDC</span>
-                                <span class="route-count">
-                                    {plural(route.transfers, 'transfer', 'transfers')}
-                                </span>
-                            </span>
-                            <span class="route-bar" aria-hidden="true">
-                                <span
-                                    class="route-fill"
-                                    style:width="{Math.max(
-                                        1,
-                                        (usdc(route.volume) / widest) * 100,
-                                    )}%"
-                                ></span>
-                            </span>
-                        </li>
-                    {/each}
-                </ul>
-                {#if stats.routes.length > routes.length}
-                    <p class="more">
-                        And {plural(
-                            stats.routes.length - routes.length,
-                            'more route',
-                            'more routes',
-                        )} in the published data.
-                    </p>
-                {/if}
-            </section>
-
-            <section class="card glass">
-                <h2 class="card-title">Latest transfers</h2>
-                <ul class="recent">
-                    {#each stats.recent as row (row.tx + row.time)}
-                        <li class="recent-row">
-                            <span class="recent-route">
-                                {name(row.source)}
-                                <span class="arrow" aria-hidden="true">→</span>
-                                <span class="sr-only">to</span>
-                                {name(row.dest)}
-                            </span>
-                            <span class="recent-amount">
-                                {formatUsdc6(row.amount)} <span class="unit">USDC</span>
-                            </span>
-                            <span class="recent-meta">
-                                <time datetime={row.time}>{when(row.time)}</time>
-                                {#if row.url}
-                                    <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external explorer link, validated as https by parseStats -->
-                                    <a
-                                        href={row.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        title={row.tx}
-                                    >
-                                        {shortHash(row.tx)} ↗
-                                    </a>
-                                {:else}
-                                    <code title={row.tx}>{shortHash(row.tx)}</code>
-                                {/if}
-                            </span>
-                        </li>
-                    {/each}
-                </ul>
-            </section>
-        {/if}
-
-        <section class="card glass">
-            <h2 class="card-title">Coverage</h2>
-            <p class="coverage-summary">
-                <span class="status {lagging.length === 0 ? 'ok' : 'behind'}">
-                    <span class="mark" aria-hidden="true">{lagging.length === 0 ? '✓' : '…'}</span>
-                    {current} of {stats.coverage.length} chains read up to date
-                </span>
-            </p>
-            {#if lagging.length > 0}
-                <p class="coverage-note">
-                    Transfers on these chains are missing from the totals until a later run catches
-                    them up.
-                </p>
-                <ul class="chain-list">
-                    {#each lagging as chain (chain.chain)}
-                        {@render chainRow(chain)}
-                    {/each}
-                </ul>
-            {/if}
-            <details class="chains">
-                <summary>
-                    {lagging.length > 0
-                        ? `Show the ${current} that are up to date`
-                        : 'Show every chain'}
-                </summary>
-                <ul class="chain-list">
-                    {#each stats.coverage.filter((c) => c.status === 'ok') as chain (chain.chain)}
-                        {@render chainRow(chain)}
-                    {/each}
-                </ul>
-            </details>
-        </section>
-
-        <section class="card glass how">
-            <h2 class="card-title">How this is counted</h2>
-            <p>
-                A transfer made here looks like any other CCTP transfer on chain, so each one
-                carries a public tag, <code>{TAG}</code>, that marks it. On EVM chains it is 28
-                bytes after the call data, which Circle's contracts ignore. On Solana it is a memo
-                next to the burn. On Stellar it is the transaction's "valid after" time, set to a
-                fixed moment in the past.
-            </p>
-            <p>
-                Once a day a script reads public RPCs for every chain, keeps the transactions that
-                carry the tag, and publishes the totals shown here together with the full list of
-                counted transactions. It uses no keys, so anyone can run it and check any transfer
-                on an explorer.
-            </p>
-            <ul class="limits">
-                <li>Counting started on {day(stats.since)}. Earlier transfers carry no tag.</li>
-                <li>
-                    Wallets are distinct signing addresses. One person with wallets on two kinds of
-                    chain counts twice.
-                </li>
-                <li>
-                    A rescue is a transfer finished here that was started somewhere else. Rescues
-                    are counted for transfers into Stellar.
-                </li>
-                <li>
-                    Anyone can copy the tag, so these are transactions that carry it, not a proof of
-                    where they were signed.
-                </li>
-                <li>
-                    This page reads one public file from GitHub. The transfer page talks only to
-                    chain RPCs and to Circle.
-                </li>
-            </ul>
-            <p class="links">
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
-                <a href={STATS_SCRIPT_URL} target="_blank" rel="noreferrer">The script</a>
-                ·
-                <!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external absolute URL -->
-                <a href={STATS_DATA_URL} target="_blank" rel="noreferrer">The data</a>
-            </p>
-        </section>
-
-        <p class="asof">
-            As of <time datetime={stats.generatedAt}>{when(stats.generatedAt)}</time> · mainnet only
-        </p>
+        <!-- Whatever goes wrong while drawing the numbers, the visitor gets
+             the same honest card as when they could not be loaded, never a
+             page stuck half way. -->
+        <svelte:boundary>
+            {@render ready(view.stats)}
+            {#snippet failed()}
+                {@render unavailableCard()}
+            {/snippet}
+        </svelte:boundary>
     {/if}
 </div>
 
@@ -620,6 +647,25 @@
 
     .coverage-note {
         font-size: 0.8rem !important;
+    }
+
+    .holes {
+        padding: 0.6rem 0.75rem;
+        border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+        border-radius: var(--radius);
+        background: var(--warning-dim);
+    }
+
+    .holes p {
+        font-size: 0.8rem !important;
+    }
+
+    .hole-list {
+        list-style: none;
+        margin: 0.35rem 0 0;
+        padding: 0;
+        font-size: 0.8rem;
+        color: var(--text);
     }
 
     .chains summary {

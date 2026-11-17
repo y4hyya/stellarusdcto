@@ -25,6 +25,11 @@ describe('the top of the value axis is a clean number at or above the data', () 
         expect(niceCeil(-4)).toBe(1);
     });
 
+    test('a value that is not a finite number still returns', () => {
+        expect(niceCeil(Infinity)).toBe(1);
+        expect(niceCeil(NaN)).toBe(1);
+    });
+
     test('three ticks: zero, half way, top', () => {
         expect(axisTicks(200)).toEqual([0, 100, 200]);
         expect(axisTicks(5000)).toEqual([0, 2500, 5000]);

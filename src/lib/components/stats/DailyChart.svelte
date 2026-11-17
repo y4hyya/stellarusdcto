@@ -37,8 +37,7 @@
 
     // A column: square on the baseline, 4px rounded at the data end. A day
     // with any volume is at least a sliver, so it never reads as empty.
-    function column(index: number): string {
-        const value = values[index];
+    function column(index: number, value: number): string {
         if (!(value > 0) || layout.width === 0) return '';
         const height = Math.max(1.5, (value / top) * PLOT_HEIGHT);
         const x = GUTTER + layout.x(index);
@@ -150,7 +149,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {#each [...daily].reverse() as d (d.date)}
+                    {#each [...daily].reverse() as d, i (i)}
                         <tr>
                             <th scope="row">{longDate(d.date)}</th>
                             <td class="num">{d.transfers}</td>
@@ -180,7 +179,7 @@
         >
             {#if width > 0}
                 <svg {width} height={HEIGHT} aria-hidden="true">
-                    {#each ticks as tick (tick)}
+                    {#each ticks as tick, i (i)}
                         <line
                             class="grid"
                             class:base={tick === 0}
@@ -194,8 +193,8 @@
                         </text>
                     {/each}
 
-                    {#each daily as d, i (d.date)}
-                        <path class="bar" class:on={i === active} d={column(i)} />
+                    {#each values as value, i (i)}
+                        <path class="bar" class:on={i === active} d={column(i, value)} />
                     {/each}
 
                     {#each dateTicks as i (i)}
