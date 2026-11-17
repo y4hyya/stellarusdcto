@@ -100,15 +100,25 @@ localhost never tag, except localhost with the dev flag
   simulation of the plain call stays as the guard against doomed transactions.
 - Solana: the memo is added only if the signed wire transaction stays within
   1232 bytes; otherwise the transaction is built without it.
-- Stellar contract calls: the tagged transaction is simulated first. If that
-  simulation fails, the untagged transaction is simulated and used, so errors
-  shown to the user are the same as today.
+- Stellar contract calls: the tagged transaction is built and simulated
+  first. If that fails for any reason, the untagged transaction is simulated
+  and used, so errors shown to the user are the same as today. This covers an
+  RPC failure and any rule the simulator enforces (it is how a memo is
+  refused). Simulation does not evaluate time bounds, so it is not what proves
+  the tag is accepted: that was proven by landing tagged transactions on
+  testnet, and the owner's check through the wallet repeats it. If the network
+  ever refused the tag at submission, the transaction would not land and no
+  funds would move, but Stellar transfers would fail until the tag is switched
+  off in a deploy.
 - Stellar classic (trustline): time bounds are long standing protocol
   behaviour, so the tag is applied without a second path.
 
-**Disclosure.** The signing previews gain one row that names the tag and says
-the contract ignores it. The footer gains one sentence next to "no tracking"
-and a link to `/stats`, which explains how counting works.
+**Disclosure.** The three burn previews gain one row that names the tag and
+says what it is. Those previews exist only for routes that include Stellar, so
+everything else (burns between other chains, mints, the trustline) is covered
+by the footer, which on a site that tags gains one sentence next to "no
+tracking" and a link to `/stats`, where counting is explained. On a site where
+tagging is off the sentence is not shown and `/stats` says so.
 
 ### 2. The counting job
 
@@ -116,19 +126,28 @@ and a link to `/stats`, which explains how counting works.
 registry only, public RPCs only.
 
 - **EVM (24 chains, each isolated):** `eth_getLogs` for `DepositForBurn` on the
-  chain's TokenMessengerV2 from the last checkpoint to a few blocks behind the
-  head, in ranges that shrink when an RPC refuses them. For each log the
-  transaction input is fetched and searched for the suffix anywhere in it,
-  which also covers batched and smart account calls. Each chain has a time
+  chain's TokenMessengerV2 from the last checkpoint to a quarter of an hour
+  behind the head, in ranges that narrow when an RPC refuses them. A node that
+  is behind answers a log query with an empty list rather than an error, so
+  every endpoint is asked for its own block number in the same request and is
+  only believed if it has reached the end of the range. For each log the
+  transaction input is fetched (in batches, each endpoint asked only for what
+  the ones before it could not return) and searched for the suffix anywhere in
+  it, which also covers batched and smart account calls. Each chain has a time
   budget per run; unfinished ranges continue on the next run.
-- **Solana:** `getSignaturesForAddress` on the TokenMessengerMinter program
-  back to the checkpoint. The response carries each transaction's memo, so only
-  transactions whose memo contains the tag are fetched and decoded.
+- **Solana:** `getSignaturesForAddress` on the TokenMessengerMinter program,
+  newest first, until the checkpoint signature itself is seen. A short page
+  only shows that a node has no older history, so it never counts as having
+  reached the checkpoint, and one endpoint reads a whole pass. A pass cut
+  short by the time budget keeps its place. The response carries each
+  transaction's memo, so only transactions whose memo is the tag are fetched
+  and decoded.
 - **Stellar:** `getEvents` for the CCTP contracts from the checkpoint. Each
   event's transaction envelope is fetched and its `minTime` compared to the tag
   value. Burns feed the transfer ledger; tagged mints feed the mint ledger.
-  The RPC keeps about seven days, so a gap longer than that is reported as a
-  coverage hole rather than silently skipped.
+  The RPC keeps about seven days. History older than that which should have
+  been read is gone for good, so it is recorded as a hole: kept in the state
+  from then on, published with the totals, and shown on the page.
 - **Nonces:** each tagged burn is resolved to its CCTP nonce through Circle's
   public Iris API. A tagged Stellar mint whose nonce matches no tagged burn is
   a rescue.
@@ -140,15 +159,22 @@ State and output live in a data directory:
 - `transfers.jsonl`: one line per counted burn (chain, tx, time, sender,
   amount in 6 decimal units, destination, nonce).
 - `mints.jsonl`: one line per tagged Stellar mint.
-- `checkpoints.json`: per chain progress and last status.
+- `checkpoints.json`: per chain progress, last status, and the holes.
 - `stats.json`: what the page reads. Totals, daily series, routes, the most
-  recent transfers with explorer links, and per chain coverage.
+  recent transfers, per chain coverage, and the holes.
 
 A daily GitHub Actions workflow runs the job and commits the data directory to
-a separate `stats` branch, so the main branch history stays clean. The job
-uses no secrets.
+a separate `stats` branch, so the main branch history stays clean. It uses no
+secrets. It is two jobs: the one that installs dependencies and runs the
+script has a read only token, and the one that holds the write token runs no
+dependency code, only the repo's own script that commits the result.
 
 ### 3. The page
+
+The file is treated as untrusted input: it is refused as a whole unless it has
+exactly the expected shape and sizes, explorer links are built from the
+registry rather than taken from it, and anything that still goes wrong while
+drawing falls back to the same card as a failed load.
 
 `/stats` fetches `stats.json` from the `stats` branch at view time
 (`raw.githubusercontent.com`, CORS enabled), so numbers refresh without a
@@ -185,3 +211,8 @@ has explicit empty and unavailable states.
 - Anyone can copy the tag, so the numbers mean "transactions carrying the tag".
 - Transfers finished into Solana cannot be marked as finished here.
 - Rescue counts cover Stellar destinations only until EVM mints are scanned.
+- A burn that went out untagged because a pre signing check declined the tag
+  is invisible to the count. If it is then finished here on Stellar, that mint
+  is tagged and reads as a rescue.
+- A tagged transaction whose burn cannot be decoded (a changed event or
+  instruction layout) is skipped on Solana and Stellar without an error.

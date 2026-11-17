@@ -158,7 +158,9 @@ The tag never touches an amount, a recipient or hook data, and it is dropped
 whenever it cannot be shown to be harmless before signing. On EVM the call is
 simulated with and without it and the two outcomes must match. On Solana the
 transaction must still fit the size limit. On Stellar the tagged transaction
-must simulate cleanly. The signing previews list it.
+must simulate cleanly. The burn previews list it; for everything else (mints,
+transfers between other chains, the trustline) the footer and the `/stats` page
+say it is there.
 
 `scripts/stats/collect.ts` reads public RPCs for every mainnet chain, keeps
 the transactions that carry the tag and writes the totals. It needs no keys:
@@ -168,7 +170,9 @@ pnpm run stats --data stats-data
 ```
 
 A scheduled workflow runs it once a day and commits the output to the `stats`
-branch, which is what the `/stats` page reads.
+branch, which is what the `/stats` page reads. Stellar nodes keep about seven
+days of history, so if the job does not run for longer than that the missing
+stretch is recorded as a hole and shown with the numbers.
 
 Worth knowing:
 
