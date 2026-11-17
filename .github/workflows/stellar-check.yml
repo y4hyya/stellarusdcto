@@ -1,0 +1,30 @@
+name: Stellar check
+
+# Stellar upgrades its protocol a few times a year, testnet about three weeks
+# before mainnet, and an upgrade can change formats the bundled SDK has to
+# decode. A static site keeps the SDK it was built with, so this job runs the
+# reads the app depends on against both networks every day and fails when the
+# bundled SDK can no longer do them. A failure on testnet is the early warning
+# for mainnet.
+
+on:
+    schedule:
+        - cron: '23 6 * * *'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    read:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: pnpm exec tsx scripts/check-stellar.ts

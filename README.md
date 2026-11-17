@@ -211,5 +211,6 @@ src/lib/
   components/                  # one .svelte file per UI piece
 src/routes/+page.svelte        # composition
 scripts/check-circle-docs.ts   # CI diff of the registry against Circle's docs
+scripts/check-stellar.ts       # daily: can the bundled SDK still read Stellar testnet and mainnet
 scripts/experiments/           # on chain safety experiments (see docs/experiments)
 ```

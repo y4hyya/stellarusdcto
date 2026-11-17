@@ -16,7 +16,8 @@
         "lint": "prettier --check . && eslint .",
         "format": "prettier --write . && cargo fmt",
         "gen:solana-cctp": "node scripts/gen-solana-cctp.mjs",
-        "stats": "tsx scripts/stats/collect.ts"
+        "stats": "tsx scripts/stats/collect.ts",
+        "check:stellar": "tsx scripts/check-stellar.ts"
     },
     "devDependencies": {
         "@codama/nodes-from-anchor": "^1.5.3",
