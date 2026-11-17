@@ -1,8 +1,0 @@
-{
-    "$schema": "https://openapi.vercel.sh/vercel.json",
-    "framework": null,
-    "alias": ["stellarusdcto-testnet.vercel.app"],
-    "installCommand": "pnpm install --frozen-lockfile",
-    "buildCommand": "pnpm run build",
-    "outputDirectory": "build"
-}
