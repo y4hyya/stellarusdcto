@@ -62,12 +62,13 @@ export async function pickTaggedOrPlain<T, S>(args: {
     enabled: boolean;
 }): Promise<{ tx: T; sim: S; tagged: boolean }> {
     if (args.enabled) {
-        const tx = args.build(STELLAR_TAG_MIN_TIME);
         try {
+            const tx = args.build(STELLAR_TAG_MIN_TIME);
             const sim = await args.simulate(tx);
             if (!args.failed(sim)) return { tx, sim, tagged: true };
         } catch {
-            // The plain attempt below decides.
+            // Building or simulating the tagged one went wrong: the plain
+            // attempt below decides.
         }
     }
     const tx = args.build(0);

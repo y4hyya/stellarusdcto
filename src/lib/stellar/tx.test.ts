@@ -84,6 +84,16 @@ describe('the tagged transaction is used only when it simulates cleanly', () => 
         await expect(pickTaggedOrPlain({ ...h.args, enabled: false })).rejects.toThrow('rpc down');
     });
 
+    test('building the tagged transaction throws: the plain one is built and used', async () => {
+        const h = harness(() => true);
+        const build = (minTime: number) => {
+            if (minTime !== 0) throw new Error('cannot build with a lower bound');
+            return h.args.build(minTime);
+        };
+        const picked = await pickTaggedOrPlain({ ...h.args, build, enabled: true });
+        expect(picked).toEqual({ tx: 0, sim: { ok: true, of: 0 }, tagged: false });
+    });
+
     test('tag off: one plain build, one simulation', async () => {
         const h = harness(() => true);
         const picked = await pickTaggedOrPlain({ ...h.args, enabled: false });
