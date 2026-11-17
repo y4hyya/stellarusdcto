@@ -13,6 +13,14 @@ describe('resolveEnv', () => {
         expect(resolveEnv('testnet.example.org', 'mainnet')).toBe('testnet');
     });
 
+    test('the staging site only ever serves testnet', () => {
+        // Staging runs code that is not released yet, so it must never be
+        // able to move real money, whatever was stored.
+        expect(resolveEnv('staging.stablehops.com', null)).toBe('testnet');
+        expect(resolveEnv('staging.stablehops.com', 'mainnet')).toBe('testnet');
+        expect(resolveEnv('STAGING.StableHops.com', 'mainnet')).toBe('testnet');
+    });
+
     test('every other public domain pins mainnet, whatever was stored', () => {
         expect(resolveEnv('stablehops.com', 'testnet')).toBe('mainnet');
         expect(resolveEnv('www.stablehops.com', 'testnet')).toBe('mainnet');
@@ -22,6 +30,7 @@ describe('resolveEnv', () => {
         // is not the testnet site.
         expect(resolveEnv('stellarusdcto-testnet.example.org', 'testnet')).toBe('mainnet');
         expect(resolveEnv('my-testnet.example.org', 'testnet')).toBe('mainnet');
+        expect(resolveEnv('my-staging.example.org', 'testnet')).toBe('mainnet');
     });
 
     test('local development follows the stored choice, defaulting to testnet', () => {

@@ -27,9 +27,11 @@ export function resolveEnv(hostname: string | undefined, stored: string | null):
     if (hostname) {
         const h = hostname.toLowerCase();
         if (!isLocalHostname(h)) {
-            // Only a first label of "testnet" makes a testnet site. Anything
-            // else, including a copy on someone else's domain, is mainnet.
-            return h.startsWith('testnet.') ? 'testnet' : 'mainnet';
+            // Only these first labels make a testnet site. Staging is one of
+            // them because it runs code that is not released yet, which must
+            // never touch real money. Anything else, including a copy on
+            // someone else's domain, is mainnet.
+            return h.startsWith('testnet.') || h.startsWith('staging.') ? 'testnet' : 'mainnet';
         }
     }
     return stored === 'mainnet' || stored === 'testnet' ? stored : 'testnet';

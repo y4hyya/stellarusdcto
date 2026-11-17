@@ -59,6 +59,7 @@ describe('where the tag is switched on', () => {
     test('previews and forks never tag, even with the dev flag', () => {
         expect(isTagHost('nice-rock-0a1b2c3d4.5.azurestaticapps.net', 'on')).toBe(false);
         expect(isTagHost('www.stablehops.com', 'on')).toBe(false);
+        expect(isTagHost('staging.stablehops.com', 'on')).toBe(false);
         expect(isTagHost('example.com', 'on')).toBe(false);
         expect(isTagHost('testnet.stablehops.com.evil.example', null)).toBe(false);
     });
