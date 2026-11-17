@@ -46,9 +46,12 @@ export async function resolveNonces(
         // Hex hashes are case insensitive and Iris wants them lowercase. Solana
         // signatures are base58, where case is part of the value.
         const hash = /^(0x)?[0-9a-fA-F]+$/.test(tx) ? tx.toLowerCase() : tx;
-        const url = `${deps.irisBase}/v2/messages/${deps.domainOf(chain)}?transactionHash=${hash}`;
         let found: unknown[];
         try {
+            // Inside the try on purpose: a burn on a chain that has since left
+            // the registry has no domain to ask about, and must only cost that
+            // one burn its nonce, not the whole run.
+            const url = `${deps.irisBase}/v2/messages/${deps.domainOf(chain)}?transactionHash=${hash}`;
             const body = (await deps.fetchJson(url)) as {
                 messages?: { eventNonce?: unknown }[];
             } | null;

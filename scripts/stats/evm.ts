@@ -7,16 +7,7 @@
 // searched for anywhere in that input, which also covers burns a wallet
 // batched inside its own call.
 
-import {
-    createPublicClient,
-    decodeEventLog,
-    fallback,
-    http,
-    numberToHex,
-    parseAbiItem,
-    toEventSelector,
-    type Hex,
-} from 'viem';
+import { decodeEventLog, numberToHex, parseAbiItem, toEventSelector, type Hex } from 'viem';
 import { inputHasTag } from '../../src/lib/attribution/tag';
 import type { EvmChainEntry } from '../../src/lib/registry/types';
 import type { ChainCoverage, TransferRecord } from '../../src/lib/stats/types';
@@ -190,9 +181,15 @@ export async function firstBlockAtOrAfter(args: {
     return hi;
 }
 
-// ─── transaction inputs ──────────────────────────────────────────────
+// ─── talking to nodes ────────────────────────────────────────────────
+//
+// Everything the scanner asks a node goes through `post`, one JSON-RPC body
+// to one URL. The scanner decides which endpoint to believe itself rather
+// than leaving it to a client: with public nodes "answered" and "answered
+// correctly" are different things, and the difference decides what gets
+// recorded as read.
 
-type Post = (url: string, body: unknown) => Promise<unknown>;
+export type Post = (url: string, body: unknown) => Promise<unknown>;
 
 async function httpPost(url: string, body: unknown): Promise<unknown> {
     const res = await fetch(url, {
@@ -205,6 +202,125 @@ async function httpPost(url: string, body: unknown): Promise<unknown> {
     return res.json();
 }
 
+type Reply = { id?: number; result?: unknown; error?: { message?: string; code?: number } };
+const request = (method: string, params: unknown[], id = 0) => ({
+    jsonrpc: '2.0',
+    id,
+    method,
+    params,
+});
+
+/** The result of one reply, or a throw carrying the node's own error text. */
+function resultOf(reply: unknown): unknown {
+    const r = reply as Reply | null;
+    if (!r || typeof r !== 'object') throw new Error('empty reply');
+    if (r.error) throw new Error(r.error.message ?? `rpc error ${r.error.code}`);
+    return r.result;
+}
+
+/** One call, asked of each endpoint in turn until one answers. */
+async function ask(
+    urls: readonly string[],
+    post: Post,
+    method: string,
+    params: unknown[],
+): Promise<unknown> {
+    let last: unknown = new Error('no RPC endpoint configured');
+    for (const url of urls) {
+        try {
+            return resultOf(await post(url, request(method, params)));
+        } catch (err) {
+            last = err;
+        }
+    }
+    throw last;
+}
+
+// Endpoints found to answer single requests but not batches, for this run.
+const refusesBatches = new Set<string>();
+
+// ─── logs ────────────────────────────────────────────────────────────
+
+export type RpcLog = {
+    topics: Hex[];
+    data: Hex;
+    blockNumber: Hex;
+    transactionHash: Hex;
+    logIndex: Hex;
+};
+
+/**
+ * The burn logs in from..to, from the first endpoint that provably has the
+ * whole range.
+ *
+ * A node that is behind the head answers a log query for blocks it has not
+ * seen with an empty list, not an error. Taken at face value that marks those
+ * blocks as read with nothing in them. So each endpoint is asked for its own
+ * block number in the same request, and its logs are only used if it has
+ * reached `to`. If no endpoint qualifies the range fails and is tried again.
+ */
+export async function fetchLogs(args: {
+    urls: readonly string[];
+    address: string;
+    from: bigint;
+    to: bigint;
+    post?: Post;
+}): Promise<RpcLog[]> {
+    const post = args.post ?? httpPost;
+    const calls = [
+        request('eth_blockNumber', [], 0),
+        request(
+            'eth_getLogs',
+            [
+                {
+                    address: args.address,
+                    topics: [DEPOSIT_FOR_BURN_TOPIC],
+                    fromBlock: numberToHex(args.from),
+                    toBlock: numberToHex(args.to),
+                },
+            ],
+            1,
+        ),
+    ];
+
+    let last: unknown = new Error('no RPC endpoint configured');
+    for (const url of args.urls) {
+        try {
+            let replies: unknown[] | null = null;
+            if (!refusesBatches.has(url)) {
+                try {
+                    const batch = await post(url, calls);
+                    if (!Array.isArray(batch)) throw new Error('not a batch reply');
+                    replies = batch;
+                } catch {
+                    replies = null;
+                }
+            }
+            if (replies === null) {
+                // One at a time. The block number is asked first, so a node
+                // that passes the check had the range before it was queried.
+                const head = await post(url, calls[0]);
+                const logs = await post(url, calls[1]);
+                refusesBatches.add(url);
+                replies = [head, logs];
+            }
+            const byId = new Map(replies.map((r) => [(r as Reply).id, r]));
+            const here = BigInt(resultOf(byId.get(0)) as string);
+            if (here < args.to) {
+                throw new Error(`${new URL(url).host} is at block ${here}, behind ${args.to}`);
+            }
+            const logs = resultOf(byId.get(1));
+            if (!Array.isArray(logs)) throw new Error('the log query did not return a list');
+            return logs as RpcLog[];
+        } catch (err) {
+            last = err;
+        }
+    }
+    throw last;
+}
+
+// ─── transaction inputs ──────────────────────────────────────────────
+
 const lookup = (hash: string, id: number) => ({
     jsonrpc: '2.0',
     id,
@@ -212,15 +328,20 @@ const lookup = (hash: string, id: number) => ({
     params: [hash],
 });
 
-const inputOf = (reply: unknown): string | null => {
-    const result = (reply as { result?: { input?: unknown } } | null)?.result;
-    return result && typeof result.input === 'string' ? result.input : null;
+// The input from one reply, if the reply is about the transaction asked for.
+// Nodes echo the hash; a reply naming another transaction (a proxy answering a
+// batch out of order) is not used.
+const inputOf = (reply: unknown, hash: string): string | null => {
+    const result = (reply as { result?: { input?: unknown; hash?: unknown } } | null)?.result;
+    if (!result || typeof result.input !== 'string') return null;
+    if (typeof result.hash === 'string' && result.hash.toLowerCase() !== hash.toLowerCase()) {
+        return null;
+    }
+    return result.input;
 };
 
 const BATCH = 25;
 const SINGLE_CONCURRENCY = 8;
-// Endpoints found to answer single requests but not batches, for this run.
-const refusesBatches = new Set<string>();
 
 /**
  * The input of each transaction, by hash. This is the bulk of a scan (one
@@ -255,7 +376,7 @@ export async function fetchInputs(args: {
                     if (!Array.isArray(replies)) throw new Error('not a batch reply');
                     for (const reply of replies) {
                         const hash = chunk[(reply as { id?: number }).id ?? -1];
-                        const input = inputOf(reply);
+                        const input = hash ? inputOf(reply, hash) : null;
                         if (hash && input !== null) inputs.set(hash, input);
                     }
                 }
@@ -266,7 +387,7 @@ export async function fetchInputs(args: {
                 const probe = missing.find((hash) => !inputs.has(hash));
                 try {
                     if (probe) {
-                        const input = inputOf(await post(url, lookup(probe, 0)));
+                        const input = inputOf(await post(url, lookup(probe, 0)), probe);
                         if (input !== null) inputs.set(probe, input);
                     }
                     refusesBatches.add(url);
@@ -281,7 +402,7 @@ export async function fetchInputs(args: {
             const todo = missing.filter((hash) => !inputs.has(hash));
             await mapLimit(todo, SINGLE_CONCURRENCY, async (hash) => {
                 try {
-                    const input = inputOf(await post(url, lookup(hash, 0)));
+                    const input = inputOf(await post(url, lookup(hash, 0)), hash);
                     if (input !== null) inputs.set(hash, input);
                 } catch {
                     // Left for the next endpoint.
@@ -297,21 +418,17 @@ export async function fetchInputs(args: {
     return inputs;
 }
 
-// Stay this far behind the head so a reorganised block is never counted.
-const CONFIRMATIONS = 64n;
-export const DEFAULT_SPAN = 2_000n;
+// ─── the scan ────────────────────────────────────────────────────────
 
-type RpcLog = {
-    topics: Hex[];
-    data: Hex;
-    blockNumber: Hex;
-    transactionHash: Hex;
-    logIndex: Hex;
-};
+// How far behind the head the scan stops, in time. Far enough that every
+// endpoint in the list has the blocks and that a reorganised block is never
+// counted; a fixed number of blocks would be seconds on a fast chain.
+const MARGIN_SECONDS = 900;
+export const DEFAULT_SPAN = 2_000n;
 
 export async function scanEvmChain(args: {
     entry: EvmChainEntry;
-    rpcUrls: string[];
+    rpcUrls: readonly string[];
     /** Last block already scanned, or null on this chain's first run. */
     fromBlock: bigint | null;
     /** Where a first run starts. */
@@ -321,29 +438,28 @@ export async function scanEvmChain(args: {
     /** The suffix to look for; the usage tag unless a check passes another. */
     suffix?: string;
     destOf: (domain: number) => string | null;
+    post?: Post;
+    pause?: (ms: number) => Promise<void>;
 }): Promise<{
     records: TransferRecord[];
     through: bigint | null;
-    span: bigint;
     /** Burns examined, tagged or not. */
     seen: number;
     coverage: ChainCoverage;
 }> {
     const { entry } = args;
-    const span = args.initialSpan ?? DEFAULT_SPAN;
-    const client = createPublicClient({
-        chain: entry.chain,
-        transport: fallback(
-            args.rpcUrls.map((url) => http(url, { timeout: 20_000, retryCount: 2 })),
-            { rank: false },
-        ),
-    });
+    const post = args.post ?? httpPost;
 
     const times = new Map<bigint, number>();
     const timestampOf = async (block: bigint): Promise<number> => {
         const known = times.get(block);
         if (known !== undefined) return known;
-        const time = Number((await client.getBlock({ blockNumber: block })).timestamp);
+        const found = (await ask(args.rpcUrls, post, 'eth_getBlockByNumber', [
+            numberToHex(block),
+            false,
+        ])) as { timestamp?: string } | null;
+        if (!found?.timestamp) throw new Error(`block ${block} was not returned`);
+        const time = Number(BigInt(found.timestamp));
         times.set(block, time);
         return time;
     };
@@ -353,8 +469,16 @@ export async function scanEvmChain(args: {
     let seen = 0;
     let through = args.fromBlock;
     try {
-        const head = await client.getBlockNumber();
-        const safeHead = head > CONFIRMATIONS ? head - CONFIRMATIONS : 0n;
+        const head = BigInt((await ask(args.rpcUrls, post, 'eth_blockNumber', [])) as string);
+
+        // The margin in blocks, from how fast this chain has been producing them.
+        const sample = head < 2_000n ? head : 2_000n;
+        const elapsed =
+            sample > 0n ? (await timestampOf(head)) - (await timestampOf(head - sample)) : 0;
+        const perBlock = elapsed > 0 ? elapsed / Number(sample) : 1;
+        const margin = BigInt(Math.max(64, Math.ceil(MARGIN_SECONDS / perBlock)));
+        const safeHead = head > margin ? head - margin : 0n;
+
         const start =
             args.fromBlock !== null
                 ? args.fromBlock + 1n
@@ -367,26 +491,24 @@ export async function scanEvmChain(args: {
         const result = await runRanges({
             from: start,
             to: safeHead,
-            initialSpan: span,
+            initialSpan: args.initialSpan ?? DEFAULT_SPAN,
             deadline: args.deadline,
             now: Date.now,
+            pause: args.pause,
             scan: async (from, to) => {
-                const logs = (await client.request({
-                    method: 'eth_getLogs',
-                    params: [
-                        {
-                            address: entry.tokenMessenger,
-                            topics: [DEPOSIT_FOR_BURN_TOPIC],
-                            fromBlock: numberToHex(from),
-                            toBlock: numberToHex(to),
-                        },
-                    ],
-                })) as unknown as RpcLog[];
+                const logs = await fetchLogs({
+                    urls: args.rpcUrls,
+                    address: entry.tokenMessenger,
+                    from,
+                    to,
+                    post,
+                });
                 if (logs.length === 0) return;
 
                 const inputs = await fetchInputs({
                     urls: args.rpcUrls,
                     hashes: logs.map((log) => log.transactionHash),
+                    post,
                 });
 
                 // Collected per range and added only once the whole range is
@@ -420,7 +542,6 @@ export async function scanEvmChain(args: {
         return {
             records,
             through,
-            span: result.span,
             seen,
             coverage: {
                 chain: entry.id,
@@ -433,7 +554,6 @@ export async function scanEvmChain(args: {
         return {
             records,
             through,
-            span,
             seen,
             coverage: { chain: entry.id, status: 'error', through: null, note: describeError(err) },
         };

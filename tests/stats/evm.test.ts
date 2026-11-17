@@ -4,9 +4,14 @@ import {
     burnRecord,
     decodeBurnLog,
     fetchInputs,
+    fetchLogs,
     firstBlockAtOrAfter,
     runRanges,
+    scanEvmChain,
 } from '../../scripts/stats/evm';
+import { EVM_TAG_SUFFIX } from '../../src/lib/attribution/tag';
+import { MAINNET } from '../../src/lib/registry/index';
+import type { EvmChainEntry } from '../../src/lib/registry/types';
 
 // Two real DepositForBurn logs from Ethereum mainnet (blocks 26429688 and
 // 26429697). The expected values below were read straight off the raw words,
@@ -371,6 +376,29 @@ describe('fetching the input of each burn transaction', () => {
         expect(rpc.calls.every((c) => c.size === 'single')).toBe(true);
     });
 
+    test('a reply that names a different transaction is not used for the one asked about', async () => {
+        // A proxy that answers a batch out of order must not pin one burn's
+        // input on another.
+        const all = hashes(2);
+        const shuffled = {
+            post: async (_url: string, body: unknown) =>
+                (body as Request[]).map((request, i, list) => {
+                    const other = list[(i + 1) % list.length];
+                    return {
+                        jsonrpc: '2.0',
+                        id: request.id,
+                        result: { hash: other.params[0], input: `0xinput-of-${other.params[0]}` },
+                    };
+                }),
+        };
+        const good = endpoints({ b: { knows: all } });
+        const post = (url: string, body: unknown) =>
+            url === 'shuffler' ? shuffled.post(url, body) : good.post(url, body);
+        const inputs = await fetchInputs({ urls: ['shuffler', 'b'], hashes: all, post });
+        expect(inputs.get('0xhash0')).toBe('0xinput-of-0xhash0');
+        expect(inputs.get('0xhash1')).toBe('0xinput-of-0xhash1');
+    });
+
     test('an endpoint that is down costs two requests, not one per transaction', async () => {
         const all = hashes(40);
         const rpc = endpoints({ dead: { knows: all, down: true }, b: { knows: all } });
@@ -398,5 +426,249 @@ describe('fetching the input of each burn transaction', () => {
         const rpc = endpoints({ a: { knows: [] } });
         expect((await fetchInputs({ urls: ['a'], hashes: [], post: rpc.post })).size).toBe(0);
         expect(rpc.calls).toEqual([]);
+    });
+});
+
+// ─── a scripted chain ────────────────────────────────────────────────
+//
+// Enough of an EVM node to run the real scanner against, offline: a block
+// every two seconds, burn logs in chosen blocks, and the transactions they
+// came from. Each endpoint can lag behind, refuse log queries, refuse batches
+// or fail from a given block on, like the public ones do.
+
+const BASE_ENTRY = MAINNET.chains.find((c) => c.id === 'base') as EvmChainEntry;
+const GENESIS = 1_700_000_000;
+const BLOCK_SECONDS = 2;
+const txHash = (n: number) => `0x${n.toString(16).padStart(64, '0')}` as `0x${string}`;
+
+type Burn = { block: number; tx: number; tagged: boolean };
+type Endpoint = {
+    /** Blocks this endpoint is behind the real head. */
+    behind?: number;
+    refuseLogs?: boolean;
+    refuseBatches?: boolean;
+    /** Log queries touching this block or later fail. */
+    failLogsFrom?: number;
+};
+
+function chain(head: number, burns: Burn[], endpoints: Record<string, Endpoint>) {
+    const logQueries: { url: string; from: number; to: number }[] = [];
+    const answer = (url: string, request: { id: number; method: string; params: unknown[] }) => {
+        const endpoint = endpoints[url];
+        const here = head - (endpoint.behind ?? 0);
+        const ok = (result: unknown) => ({ jsonrpc: '2.0', id: request.id, result });
+        const fail = (message: string) => ({
+            jsonrpc: '2.0',
+            id: request.id,
+            error: { code: -32000, message },
+        });
+        switch (request.method) {
+            case 'eth_blockNumber':
+                return ok(`0x${here.toString(16)}`);
+            case 'eth_getBlockByNumber': {
+                const number = parseInt(request.params[0] as string, 16);
+                if (number > here) return ok(null);
+                return ok({
+                    number: request.params[0],
+                    timestamp: `0x${(GENESIS + number * BLOCK_SECONDS).toString(16)}`,
+                });
+            }
+            case 'eth_getLogs': {
+                const filter = request.params[0] as { fromBlock: string; toBlock: string };
+                const from = parseInt(filter.fromBlock, 16);
+                const to = parseInt(filter.toBlock, 16);
+                logQueries.push({ url, from, to });
+                if (endpoint.refuseLogs) return fail('eth_getLogs is not available');
+                if (endpoint.failLogsFrom !== undefined && to >= endpoint.failLogsFrom) {
+                    return fail('connection reset');
+                }
+                // A node that is behind simply has nothing for blocks it has not seen.
+                return ok(
+                    burns
+                        .filter((b) => b.block >= from && b.block <= to && b.block <= here)
+                        .map((b) => ({
+                            ...PLAIN_LOG,
+                            blockNumber: `0x${b.block.toString(16)}`,
+                            transactionHash: txHash(b.tx),
+                            logIndex: '0x7',
+                        })),
+                );
+            }
+            case 'eth_getTransactionByHash': {
+                const hash = request.params[0] as string;
+                const burn = burns.find((b) => txHash(b.tx) === hash);
+                if (!burn || burn.block > here) return ok(null);
+                const input =
+                    '0x8e0250ee' + '00'.repeat(64) + (burn.tagged ? EVM_TAG_SUFFIX.slice(2) : '');
+                return ok({ hash, input });
+            }
+            default:
+                return fail(`unexpected ${request.method}`);
+        }
+    };
+    return {
+        logQueries,
+        post: async (url: string, body: unknown) => {
+            if (Array.isArray(body)) {
+                if (endpoints[url].refuseBatches) throw new Error('HTTP 413');
+                return body.map((request) => answer(url, request));
+            }
+            return answer(url, body as never);
+        },
+    };
+}
+
+const destOf = (domain: number) => (domain === 6 ? 'base' : domain === 27 ? 'stellar' : null);
+const scanArgs = {
+    entry: BASE_ENTRY,
+    since: new Date((GENESIS + 1_000 * BLOCK_SECONDS) * 1000),
+    deadline: Number.MAX_SAFE_INTEGER,
+    destOf,
+    pause: async () => {},
+};
+
+describe('asking for logs', () => {
+    const query = { address: BASE_ENTRY.tokenMessenger, from: 101n, to: 936n };
+
+    test('an endpoint that has the whole range answers', async () => {
+        const c = chain(1_000, [{ block: 500, tx: 1, tagged: true }], { a: {} });
+        const logs = await fetchLogs({ urls: ['a'], ...query, post: c.post });
+        expect(logs.map((l) => l.transactionHash)).toEqual([txHash(1)]);
+    });
+
+    test('an endpoint that is behind the range is not believed, even when it answers', async () => {
+        // The first endpoint refuses log queries. The second is at block 900
+        // and answers "no logs" for 101 to 936, though it has never seen 901
+        // to 936. That must not count as an answer.
+        const c = chain(1_000, [{ block: 920, tx: 1, tagged: true }], {
+            a: { refuseLogs: true },
+            b: { behind: 100 },
+        });
+        await expect(fetchLogs({ urls: ['a', 'b'], ...query, post: c.post })).rejects.toThrow();
+    });
+
+    test('a lagging endpoint is passed over for one that is up to date', async () => {
+        const c = chain(1_000, [{ block: 920, tx: 1, tagged: true }], {
+            lagging: { behind: 100 },
+            current: {},
+        });
+        const logs = await fetchLogs({ urls: ['lagging', 'current'], ...query, post: c.post });
+        expect(logs).toHaveLength(1);
+    });
+
+    test('an endpoint that refuses batches is asked in two requests and still checked', async () => {
+        const c = chain(1_000, [{ block: 500, tx: 1, tagged: true }], {
+            nobatch: { refuseBatches: true },
+        });
+        expect(await fetchLogs({ urls: ['nobatch'], ...query, post: c.post })).toHaveLength(1);
+        const behind = chain(1_000, [], { nobatch2: { refuseBatches: true, behind: 100 } });
+        await expect(
+            fetchLogs({ urls: ['nobatch2'], ...query, post: behind.post }),
+        ).rejects.toThrow();
+    });
+});
+
+describe('scanning a chain end to end', () => {
+    const burns: Burn[] = [
+        { block: 900, tx: 1, tagged: true }, // before counting starts
+        { block: 1_200, tx: 2, tagged: true },
+        { block: 1_300, tx: 3, tagged: false },
+        { block: 4_400, tx: 4, tagged: true },
+        { block: 4_990, tx: 5, tagged: true }, // too close to the head to count yet
+    ];
+
+    test('a first run starts at the counting date and keeps only tagged burns', async () => {
+        const c = chain(5_000, burns, { a: {} });
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['a'],
+            fromBlock: null,
+            post: c.post,
+        });
+        expect(result.coverage.status).toBe('ok');
+        expect(result.records.map((r) => r.tx)).toEqual([txHash(2), txHash(4)]);
+        expect(result.seen).toBe(3);
+        expect(result.records[0]).toEqual({
+            id: `base:${txHash(2)}:7`,
+            chain: 'base',
+            tx: txHash(2),
+            time: new Date((GENESIS + 1_200 * BLOCK_SECONDS) * 1000).toISOString(),
+            from: '0x1B1264e08B4BbCabeacb3Cca2bf0475fC2276e2E',
+            amount: '30200000500',
+            destDomain: 6,
+            dest: 'base',
+            nonce: null,
+        });
+        // Nothing before the counting date was asked for.
+        expect(Math.min(...c.logQueries.map((q) => q.from))).toBe(1_000);
+    });
+
+    test('it stays a quarter of an hour behind the head, not a fixed few blocks', async () => {
+        const c = chain(5_000, burns, { a: {} });
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['a'],
+            fromBlock: null,
+            post: c.post,
+        });
+        // 900 seconds at two seconds a block is 450 blocks.
+        expect(result.through).toBe(4_550n);
+        expect(result.coverage.through).toBe(
+            new Date((GENESIS + 4_550 * BLOCK_SECONDS) * 1000).toISOString(),
+        );
+    });
+
+    test('a later run reads only what is new', async () => {
+        const c = chain(5_000, burns, { a: {} });
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['a'],
+            fromBlock: 4_550n,
+            post: c.post,
+        });
+        expect(result.records).toEqual([]);
+        expect(result.through).toBe(4_550n);
+        expect(c.logQueries).toEqual([]);
+    });
+
+    test('only endpoints that are behind can answer: nothing is marked as read', async () => {
+        const c = chain(5_000, burns, { a: { refuseLogs: true }, b: { behind: 1_000 } });
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['a', 'b'],
+            fromBlock: 4_100n,
+            post: c.post,
+        });
+        expect(result.coverage.status).toBe('error');
+        expect(result.through).toBe(4_100n);
+        expect(result.records).toEqual([]);
+    });
+
+    test('an RPC that fails part way keeps what was read and stops the checkpoint there', async () => {
+        const c = chain(5_000, burns, { a: { failLogsFrom: 3_000 } });
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['a'],
+            fromBlock: null,
+            post: c.post,
+        });
+        expect(result.coverage.status).toBe('error');
+        expect(result.records.map((r) => r.tx)).toEqual([txHash(2)]);
+        expect(result.through !== null && result.through >= 1_300n && result.through < 3_000n).toBe(
+            true,
+        );
+    });
+
+    test('an RPC that does not answer at all reports an error and moves nothing', async () => {
+        const result = await scanEvmChain({
+            ...scanArgs,
+            rpcUrls: ['dead'],
+            fromBlock: 4_100n,
+            post: async () => {
+                throw new Error('HTTP 503');
+            },
+        });
+        expect(result.coverage).toMatchObject({ chain: 'base', status: 'error' });
+        expect(result.through).toBe(4_100n);
     });
 });

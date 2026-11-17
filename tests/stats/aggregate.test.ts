@@ -48,6 +48,7 @@ const stats = (transfers: TransferRecord[], mints: MintRecord[] = []) =>
         transfers,
         mints,
         coverage: [{ chain: 'base', status: 'ok', through: '2026-11-22T11:00:00Z' }],
+        gaps: [],
         familyOf,
         explorerUrl,
         now,
@@ -83,6 +84,24 @@ describe('totals', () => {
         expect(s.routes).toEqual([]);
         expect(s.recent).toEqual([]);
         expect(s.coverage).toHaveLength(1);
+        expect(s.gaps).toEqual([]);
+    });
+
+    test('known holes in what could be read are carried into the result', () => {
+        const gaps = [
+            { chain: 'stellar', from: '2026-11-16T00:00:00Z', to: '2026-11-20T08:00:00Z' },
+        ];
+        const s = buildStats({
+            transfers: [],
+            mints: [],
+            coverage: [],
+            gaps,
+            familyOf,
+            explorerUrl,
+            now,
+            since: '2026-11-16',
+        });
+        expect(s.gaps).toEqual(gaps);
     });
 
     test('volume beyond 2^53 units is still exact', () => {
@@ -126,6 +145,15 @@ describe('daily series', () => {
             { date: '2026-11-20', transfers: 1, volume: '1000000', newWallets: 1 },
             { date: '2026-11-21', transfers: 0, volume: '0', newWallets: 0 },
             { date: '2026-11-22', transfers: 1, volume: '3000000', newWallets: 0 },
+        ]);
+    });
+
+    test('a transfer dated after the clock still gets its day', () => {
+        // A runner whose clock is behind the chains must not produce transfers
+        // with no day to plot them on.
+        const s = stats([transfer({ time: '2026-11-25T08:00:00Z', amount: '1000000' })]);
+        expect(s.daily).toEqual([
+            { date: '2026-11-25', transfers: 1, volume: '1000000', newWallets: 1 },
         ]);
     });
 
@@ -190,6 +218,32 @@ describe('rescues: finished here, started elsewhere', () => {
         const burn = transfer({ chain: 'base', amount: '4200000', nonce: null });
         const s = stats([burn], [mint({ source: 'base', amount: '4200000' })]);
         expect(s.totals.rescues).toBe(0);
+    });
+
+    test('a pending burn headed somewhere else does not claim a mint on Stellar', () => {
+        // Same source, same amount, but this burn went to Arbitrum. The mint
+        // on Stellar is someone else's transfer finished here: a rescue.
+        const burn = transfer({
+            chain: 'base',
+            amount: '4200000',
+            nonce: null,
+            dest: 'arbitrum',
+            destDomain: 3,
+        });
+        const s = stats([burn], [mint({ source: 'base', amount: '4200000' })]);
+        expect(s.totals.rescues).toBe(1);
+    });
+
+    test('one pending burn claims one mint, not every mint of that amount', () => {
+        const burn = transfer({ chain: 'base', amount: '4200000', nonce: null });
+        const s = stats(
+            [burn],
+            [
+                mint({ source: 'base', amount: '4200000' }),
+                mint({ source: 'base', amount: '4200000' }),
+            ],
+        );
+        expect(s.totals.rescues).toBe(1);
     });
 
     test('rescues never add to transfers or volume', () => {

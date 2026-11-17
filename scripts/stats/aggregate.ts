@@ -6,6 +6,7 @@ import { TAG } from '../../src/lib/attribution/tag';
 import {
     STATS_SCHEMA,
     type ChainCoverage,
+    type CoverageGap,
     type MintRecord,
     type Stats,
     type TransferRecord,
@@ -24,6 +25,7 @@ export function buildStats(args: {
     transfers: TransferRecord[];
     mints: MintRecord[];
     coverage: ChainCoverage[];
+    gaps: CoverageGap[];
     familyOf: (chain: string) => Family;
     explorerUrl: (chain: string, tx: string) => string;
     now: Date;
@@ -82,7 +84,12 @@ export function buildStats(args: {
     // continuous axis and quiet days show as quiet rather than as missing.
     const daily: Stats['daily'] = [];
     if (transfers.length > 0) {
-        const last = Date.parse(`${args.now.toISOString().slice(0, 10)}T00:00:00Z`);
+        // Through today, or through the latest transfer if this machine's
+        // clock is behind the chains: every transfer gets a day.
+        const last = Math.max(
+            Date.parse(`${args.now.toISOString().slice(0, 10)}T00:00:00Z`),
+            Date.parse(`${day(transfers[transfers.length - 1].time)}T00:00:00Z`),
+        );
         const first = Math.max(
             Date.parse(`${day(transfers[0].time)}T00:00:00Z`),
             last - (MAX_DAYS - 1) * DAY_MS,
@@ -107,15 +114,16 @@ export function buildStats(args: {
 
     // A rescue is a mint made here for a burn that was not. Burns are matched
     // by the nonce Circle assigned. A burn whose nonce is not known yet claims
-    // one mint of the same amount from the same source instead, so its own
-    // mint is not miscounted in the meantime.
+    // one mint of the same amount, from the same source, on the chain it was
+    // sent to, so its own mint is not miscounted in the meantime. A pending
+    // burn headed elsewhere claims nothing.
     const burnNonces = new Set<string>();
     const unresolved = new Map<string, number>();
     for (const t of transfers) {
         if (t.nonce) {
             burnNonces.add(t.nonce.toLowerCase());
-        } else {
-            const key = `${t.chain}:${t.amount}`;
+        } else if (t.dest) {
+            const key = `${t.chain}>${t.dest}:${t.amount}`;
             unresolved.set(key, (unresolved.get(key) ?? 0) + 1);
         }
     }
@@ -123,7 +131,7 @@ export function buildStats(args: {
     let rescuedVolume = 0n;
     for (const m of args.mints) {
         if (burnNonces.has(m.nonce.toLowerCase())) continue;
-        const key = `${m.source}:${m.amount}`;
+        const key = `${m.source}>${m.chain}:${m.amount}`;
         const pending = unresolved.get(key) ?? 0;
         if (pending > 0) {
             unresolved.set(key, pending - 1);
@@ -162,5 +170,6 @@ export function buildStats(args: {
         routes,
         recent,
         coverage: args.coverage,
+        gaps: args.gaps,
     };
 }

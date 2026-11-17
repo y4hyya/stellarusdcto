@@ -5,13 +5,14 @@
 // reads the events of Circle's two CCTP contracts, then looks at the envelope
 // of each transaction that produced one.
 //
-// The RPC only keeps about seven days of events. A gap longer than that is
-// reported in the coverage note; it cannot be read back from here.
+// The RPC only keeps about seven days of events. Anything older than that is
+// out of reach for good, so a scan that should have covered it reports the
+// hole to its caller, which keeps a lasting record of it.
 
 import { Networks, TransactionBuilder, scValToNative, xdr } from '@stellar/stellar-sdk';
 import { minTimeIsTag } from '../../src/lib/attribution/tag';
 import type { ChainCoverage, MintRecord, TransferRecord } from '../../src/lib/stats/types';
-import { describeError, jsonRpc, mapLimit } from './rpc';
+import { describeError, jsonRpc, mapLimit, type RpcCall } from './rpc';
 
 /** An event as `getEvents` returns it: topics and value are base64 XDR. */
 export type StellarEvent = {
@@ -111,8 +112,13 @@ export function cursorLedger(cursor: string): number | null {
     return Number(BigInt(match[1]) >> 32n);
 }
 
-type EventsPage = { events: StellarEvent[]; cursor: string; latestLedger: number };
-type Health = { latestLedger: number; oldestLedger: number; latestLedgerCloseTime?: string };
+type EventsPage = { events: StellarEvent[]; cursor?: string; latestLedger: number };
+type Health = {
+    latestLedger: number;
+    oldestLedger: number;
+    latestLedgerCloseTime?: string;
+    oldestLedgerCloseTime?: string;
+};
 
 const PAGE_SIZE = 1_000;
 // Ledgers close about every five to six seconds. Erring long starts a first
@@ -129,38 +135,54 @@ export async function scanStellar(args: {
     destOf: (domain: number) => string | null;
     /** Which lower time bounds count; the usage tag unless a check passes another. */
     matches?: (minTime: string | null) => boolean;
+    now?: () => number;
+    pageSize?: number;
+    /** How to reach the node; replaced in tests. */
+    call?: RpcCall;
 }): Promise<{
     transfers: TransferRecord[];
     mints: MintRecord[];
     through: number | null;
     /** Transactions examined, tagged or not. */
     seen: number;
+    /**
+     * Set when part of what should have been read is no longer kept by the
+     * node: everything before `to` (the close time of its oldest ledger) is
+     * out of reach for good. The caller records it; it is never "caught up".
+     */
+    gap: { to: string } | null;
     coverage: ChainCoverage;
 }> {
-    const call = jsonRpc(args.rpcUrls);
+    const call = args.call ?? jsonRpc(args.rpcUrls);
     const matches = args.matches ?? minTimeIsTag;
+    const now = args.now ?? Date.now;
+    const pageSize = args.pageSize ?? PAGE_SIZE;
     const transfers: TransferRecord[] = [];
     const mints: MintRecord[] = [];
     let through = args.fromLedger;
     let seen = 0;
-    let note: string | undefined;
+    let gap: { to: string } | null = null;
 
     try {
         const health = (await call('getHealth', {})) as Health;
+        const oldestClose = Number(health.oldestLedgerCloseTime ?? 0);
+        const holeEnds = new Date(oldestClose * 1000).toISOString();
+
         let start: number;
         if (args.fromLedger !== null) {
             start = args.fromLedger + 1;
+            if (start < health.oldestLedger) gap = { to: holeEnds };
         } else {
-            const latestClose = Number(health.latestLedgerCloseTime ?? Date.now() / 1000);
-            const secondsBack = Math.max(0, latestClose - args.since.getTime() / 1000);
+            const sinceSec = args.since.getTime() / 1000;
+            const latestClose = Number(health.latestLedgerCloseTime ?? now() / 1000);
+            const secondsBack = Math.max(0, latestClose - sinceSec);
             start = health.latestLedger - Math.ceil(secondsBack / SECONDS_PER_LEDGER) - 100;
+            // A first run that begins after the counting start has the same
+            // hole: whatever happened between that start and the node's oldest
+            // ledger cannot be read.
+            if (oldestClose > 0 && sinceSec < oldestClose) gap = { to: holeEnds };
         }
-        if (start < health.oldestLedger) {
-            if (args.fromLedger !== null) {
-                note = `ledgers ${start} to ${health.oldestLedger - 1} were no longer kept by the RPC and were not scanned`;
-            }
-            start = health.oldestLedger;
-        }
+        if (start < health.oldestLedger) start = health.oldestLedger;
 
         const filters = [
             {
@@ -176,13 +198,20 @@ export async function scanStellar(args: {
         let complete = start > health.latestLedger;
 
         while (!complete) {
-            if (Date.now() >= args.deadline) break;
+            if (now() >= args.deadline) break;
             const page = (await call(
                 'getEvents',
                 cursor
-                    ? { filters, pagination: { cursor, limit: PAGE_SIZE } }
-                    : { startLedger: start, filters, pagination: { limit: PAGE_SIZE } },
+                    ? { filters, pagination: { cursor, limit: pageSize } }
+                    : { startLedger: start, filters, pagination: { limit: pageSize } },
             )) as EventsPage;
+
+            // Without a cursor there is no telling where this reply ended, and
+            // asking again would only return the same page. Stop here.
+            const at = page.cursor ? cursorLedger(page.cursor) : null;
+            if (!page.cursor || at === null || !Array.isArray(page.events)) {
+                throw new Error('the node did not return a usable paging cursor');
+            }
 
             const relevant = page.events.filter(
                 (e) =>
@@ -235,18 +264,14 @@ export async function scanStellar(args: {
             }
 
             // Each call covers a bounded run of ledgers and returns a cursor
-            // at the end of what it covered. A page that was not full and
-            // whose cursor has reached the head means everything is read. A
-            // full page stopped inside a ledger, so that ledger is read again.
-            const at = cursorLedger(page.cursor);
-            const stalled = page.cursor === cursor && page.events.length === 0;
-            if (at !== null) {
-                through = page.events.length < PAGE_SIZE ? at : at - 1;
-            }
-            if (
-                stalled ||
-                (page.events.length < PAGE_SIZE && at !== null && at >= page.latestLedger)
-            ) {
+            // at the end of what it covered. A page that was not full reached
+            // that end; a full page stopped inside a ledger, so that ledger is
+            // read again next time (ids make the repeat harmless).
+            const full = page.events.length >= pageSize;
+            through = full ? at - 1 : at;
+            if (page.cursor === cursor && page.events.length === 0) {
+                complete = true;
+            } else if (!full && at >= page.latestLedger) {
                 complete = true;
             }
             cursor = page.cursor;
@@ -257,11 +282,11 @@ export async function scanStellar(args: {
             mints,
             through,
             seen,
+            gap,
             coverage: {
                 chain: 'stellar',
                 status: complete ? 'ok' : 'behind',
                 through: complete ? new Date().toISOString() : null,
-                ...(note ? { note } : {}),
             },
         };
     } catch (err) {
@@ -270,6 +295,7 @@ export async function scanStellar(args: {
             mints,
             through,
             seen,
+            gap,
             coverage: {
                 chain: 'stellar',
                 status: 'error',

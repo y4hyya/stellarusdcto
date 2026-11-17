@@ -7,16 +7,27 @@ import { STATS_SCHEMA, type Stats } from './types';
 // knows how to draw is refused as a whole, and the page shows its
 // "unavailable" state instead of a half drawn one.
 
-const DIGITS = /^\d+$/;
+// An amount is a whole number of 6 decimal units. Thirty digits is far beyond
+// all the USDC that exists and still safe to do arithmetic on; anything
+// longer is not an amount.
+const DIGITS = /^\d{1,30}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+// The script writes at most 400 days and 20 recent transfers. The other
+// limits only keep a hostile file from asking the page to draw without end.
+const MAX = { daily: 400, routes: 2000, recent: 50, coverage: 200, gaps: 200 };
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
     typeof v === 'object' && v !== null && !Array.isArray(v);
-const isCount = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0;
+const isCount = (v: unknown): v is number =>
+    typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
 const isAmount = (v: unknown): v is string => typeof v === 'string' && DIGITS.test(v);
 const isText = (v: unknown): v is string => typeof v === 'string';
-const allOf = (v: unknown, check: (row: Record<string, unknown>) => boolean): boolean =>
-    Array.isArray(v) && v.every((row) => isObject(row) && check(row));
+const allOf = (
+    v: unknown,
+    limit: number,
+    check: (row: Record<string, unknown>) => boolean,
+): boolean =>
+    Array.isArray(v) && v.length <= limit && v.every((row) => isObject(row) && check(row));
 
 export function parseStats(raw: unknown): Stats | null {
     if (!isObject(raw)) return null;
@@ -42,6 +53,7 @@ export function parseStats(raw: unknown): Stats | null {
 
     const dailyOk = allOf(
         raw.daily,
+        MAX.daily,
         (d) =>
             isText(d.date) &&
             DAY.test(d.date) &&
@@ -51,10 +63,12 @@ export function parseStats(raw: unknown): Stats | null {
     );
     const routesOk = allOf(
         raw.routes,
+        MAX.routes,
         (r) => isText(r.source) && isText(r.dest) && isCount(r.transfers) && isAmount(r.volume),
     );
     const recentOk = allOf(
         raw.recent,
+        MAX.recent,
         (r) =>
             isText(r.time) &&
             isText(r.source) &&
@@ -68,13 +82,21 @@ export function parseStats(raw: unknown): Stats | null {
     );
     const coverageOk = allOf(
         raw.coverage,
+        MAX.coverage,
         (c) =>
             isText(c.chain) &&
             (c.status === 'ok' || c.status === 'behind' || c.status === 'error') &&
             (c.through === null || isText(c.through)) &&
             (c.note === undefined || isText(c.note)),
     );
-    if (!dailyOk || !routesOk || !recentOk || !coverageOk) return null;
+    const gapsOk = allOf(
+        raw.gaps,
+        MAX.gaps,
+        (g) => isText(g.chain) && (g.from === null || isText(g.from)) && isText(g.to),
+    );
+    if (!dailyOk || !routesOk || !recentOk || !coverageOk || !gapsOk) return null;
+    // Transfers with no day to plot them on cannot be drawn.
+    if (totals.transfers > 0 && (raw.daily as unknown[]).length === 0) return null;
 
     return raw as unknown as Stats;
 }

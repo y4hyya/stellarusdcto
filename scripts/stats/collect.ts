@@ -23,44 +23,70 @@ import { pathToFileURL } from 'node:url';
 import { MAINNET } from '../../src/lib/registry/index';
 import type { EvmChainEntry, SolanaChainEntry } from '../../src/lib/registry/types';
 import { parseStats } from '../../src/lib/stats/format';
-import type { ChainCoverage, MintRecord, Stats, TransferRecord } from '../../src/lib/stats/types';
+import type {
+    ChainCoverage,
+    CoverageGap,
+    MintRecord,
+    Stats,
+    TransferRecord,
+} from '../../src/lib/stats/types';
 import { buildStats } from './aggregate';
 import { scanEvmChain } from './evm';
 import { resolveNonces } from './iris';
 import { COUNTING_SINCE, chainHelpers, parseArgs, summaryMarkdown } from './report';
 import { describeError, fetchJson } from './rpc';
 import { scanRpcUrls, scanSpan } from './rpcs';
-import { scanSolana } from './solana';
+import { scanSolana, type SolanaCheckpoint } from './solana';
 import { scanStellar } from './stellar';
 import { appendUnique, readJson, readJsonl, writeJson, writeJsonl } from './store';
 
 type Checkpoints = {
     /** Last block scanned per EVM chain (a decimal string). */
     evm: Record<string, string | null>;
-    /** Newest signature seen on Solana. */
-    solana: string | null;
+    /** Where the Solana scan stands, including an unfinished pass. */
+    solana: SolanaCheckpoint;
     /** Last ledger scanned on Stellar. */
     stellar: number | null;
     /** The latest coverage row per chain, kept so a partial run does not blank the others. */
     coverage: Record<string, ChainCoverage>;
+    /** Stretches that could not be read and never will be. Only ever added to. */
+    gaps: CoverageGap[];
 };
 
-export async function run(args: {
-    data: string;
-    only: string[] | null;
-    budgetMs: number;
-}): Promise<Stats> {
+/** The chain scans and the nonce lookup, replaceable so a run can be tested offline. */
+export type Scanners = {
+    scanEvmChain: typeof scanEvmChain;
+    scanSolana: typeof scanSolana;
+    scanStellar: typeof scanStellar;
+    resolveNonces: (records: TransferRecord[]) => Promise<TransferRecord[]>;
+};
+
+function loadCheckpoints(path: string): Checkpoints {
+    const raw = readJson<Partial<Checkpoints> & { solana?: unknown }>(path, {});
+    // Earlier files kept the Solana checkpoint as a bare signature.
+    const solana =
+        typeof raw.solana === 'object' && raw.solana !== null
+            ? (raw.solana as SolanaCheckpoint)
+            : { signature: typeof raw.solana === 'string' ? raw.solana : null };
+    return {
+        evm: raw.evm ?? {},
+        solana,
+        stellar: raw.stellar ?? null,
+        coverage: raw.coverage ?? {},
+        gaps: raw.gaps ?? [],
+    };
+}
+
+export async function run(
+    args: { data: string; only: string[] | null; budgetMs: number },
+    replace: Partial<Scanners> = {},
+): Promise<Stats> {
     mkdirSync(args.data, { recursive: true });
     const path = (name: string) => join(args.data, name);
 
     let transfers = readJsonl<TransferRecord>(path('transfers.jsonl'));
     let mints = readJsonl<MintRecord>(path('mints.jsonl'));
-    const checkpoints = readJson<Checkpoints>(path('checkpoints.json'), {
-        evm: {},
-        solana: null,
-        stellar: null,
-        coverage: {},
-    });
+    const checkpoints = loadCheckpoints(path('checkpoints.json'));
     // State is written after every chain, so a run that is killed keeps what
     // the chains that finished had found.
     const save = () => {
@@ -72,21 +98,46 @@ export async function run(args: {
     const registry = MAINNET;
     const { familyOf, explorerUrl, destOf, domainOf, labels } = chainHelpers(registry);
     const since = new Date(`${COUNTING_SINCE}T00:00:00Z`);
-    const deadline = Date.now() + args.budgetMs;
-    const wanted = (id: string) => !args.only || args.only.includes(id);
     const report = (id: string, c: ChainCoverage, seen: number, found: number) =>
         console.log(
             `${id.padEnd(11)} ${c.status.padEnd(6)} examined ${String(seen).padStart(6)}  tagged ${String(found).padStart(4)}  ${c.note ?? ''}`,
         );
 
+    const scanners: Scanners = {
+        scanEvmChain,
+        scanSolana,
+        scanStellar,
+        resolveNonces: (records) =>
+            resolveNonces(records, { irisBase: registry.irisBase, domainOf, fetchJson }),
+        ...replace,
+    };
+    // A chain's scan reports its own failures. This is for the ones it does
+    // not see coming: whatever goes wrong inside one chain's job is recorded
+    // against that chain and costs the others nothing.
+    const guarded = async (id: string, job: () => Promise<void>) => {
+        try {
+            await job();
+        } catch (err) {
+            checkpoints.coverage[id] = {
+                chain: id,
+                status: 'error',
+                through: null,
+                note: describeError(err),
+            };
+            save();
+            report(id, checkpoints.coverage[id], 0, 0);
+        }
+    };
+    const deadline = Date.now() + args.budgetMs;
+    const wanted = (id: string) => !args.only || args.only.includes(id);
     const jobs: Promise<void>[] = [];
 
     for (const entry of registry.chains.filter((c): c is EvmChainEntry => c.family === 'evm')) {
         if (!wanted(entry.id)) continue;
         jobs.push(
-            (async () => {
+            guarded(entry.id, async () => {
                 const last = checkpoints.evm[entry.id];
-                const result = await scanEvmChain({
+                const result = await scanners.scanEvmChain({
                     entry,
                     rpcUrls: scanRpcUrls(entry.id, entry.chain.rpcUrls.default.http),
                     fromBlock: last ? BigInt(last) : null,
@@ -100,35 +151,37 @@ export async function run(args: {
                 checkpoints.coverage[entry.id] = result.coverage;
                 save();
                 report(entry.id, result.coverage, result.seen, result.records.length);
-            })(),
+            }),
         );
     }
 
     const solana = registry.chains.find((c): c is SolanaChainEntry => c.family === 'solana');
     if (solana && wanted(solana.id)) {
         jobs.push(
-            (async () => {
-                const result = await scanSolana({
+            guarded(solana.id, async () => {
+                const result = await scanners.scanSolana({
                     entry: solana,
                     rpcUrls: solana.rpcUrls,
-                    untilSignature: checkpoints.solana,
+                    state: checkpoints.solana,
                     since,
                     deadline,
                     destOf,
                 });
                 transfers = appendUnique(transfers, result.records);
-                checkpoints.solana = result.newest;
+                checkpoints.solana = result.state;
                 checkpoints.coverage[solana.id] = result.coverage;
                 save();
                 report(solana.id, result.coverage, result.seen, result.records.length);
-            })(),
+            }),
         );
     }
 
     if (wanted('stellar')) {
         jobs.push(
-            (async () => {
-                const result = await scanStellar({
+            guarded('stellar', async () => {
+                // Where the last reading of Stellar ended, for the start of a hole.
+                const readUntil = checkpoints.coverage.stellar?.through ?? since.toISOString();
+                const result = await scanners.scanStellar({
                     contracts: registry.stellar.contracts,
                     rpcUrls: registry.stellar.rpcUrls,
                     fromLedger: checkpoints.stellar,
@@ -139,6 +192,15 @@ export async function run(args: {
                 transfers = appendUnique(transfers, result.transfers);
                 mints = appendUnique(mints, result.mints);
                 checkpoints.stellar = result.through;
+                // A hole is recorded once and never removed: the node no
+                // longer has that history, so no later run can fill it.
+                const hole = result.gap;
+                if (
+                    hole &&
+                    !checkpoints.gaps.some((g) => g.chain === 'stellar' && g.to === hole.to)
+                ) {
+                    checkpoints.gaps.push({ chain: 'stellar', from: readUntil, to: hole.to });
+                }
                 checkpoints.coverage.stellar = result.coverage;
                 save();
                 report(
@@ -147,7 +209,7 @@ export async function run(args: {
                     result.seen,
                     result.transfers.length + result.mints.length,
                 );
-            })(),
+            }),
         );
     }
 
@@ -155,11 +217,7 @@ export async function run(args: {
 
     // Burns that do not know their CCTP nonce yet ask Circle for it; the ones
     // Circle has not attested stay unresolved until a later run.
-    transfers = await resolveNonces(transfers, {
-        irisBase: registry.irisBase,
-        domainOf,
-        fetchJson,
-    });
+    transfers = await scanners.resolveNonces(transfers);
     save();
 
     const order = [...registry.chains.map((c) => c.id), 'stellar'];
@@ -176,6 +234,7 @@ export async function run(args: {
         transfers,
         mints,
         coverage,
+        gaps: checkpoints.gaps,
         familyOf,
         explorerUrl,
         now: new Date(),

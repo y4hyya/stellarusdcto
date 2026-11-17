@@ -111,6 +111,25 @@ describe('resolving burns to the nonce Circle assigned', () => {
         expect(resolved.nonce).toBeNull();
     });
 
+    test('a burn on a chain the registry no longer knows is skipped, not fatal', async () => {
+        const strict = (chain: string) => {
+            if (chain === 'gone') throw new Error('unknown chain: gone');
+            return domainOf(chain);
+        };
+        const resolved = await resolveNonces(
+            [
+                record({ id: 'gone:0xcc:1', chain: 'gone', tx: '0xcc' }),
+                record({ id: 'base:0xbb:1', tx: '0xbb' }),
+            ],
+            {
+                irisBase: BASE,
+                domainOf: strict,
+                fetchJson: async () => ({ messages: [{ eventNonce: NONCE_B }] }),
+            },
+        );
+        expect(resolved.map((r) => r.nonce)).toEqual([null, NONCE_B]);
+    });
+
     test('a failing lookup leaves the burn unresolved and does not stop the others', async () => {
         const resolved = await resolveNonces(
             [record({ id: 'base:0xaa:1', tx: '0xaa' }), record({ id: 'base:0xbb:1', tx: '0xbb' })],

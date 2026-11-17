@@ -4,6 +4,7 @@
 
 import type { Registry } from '../../src/lib/registry/types';
 import { chainLabel, formatUsdc6 } from '../../src/lib/stats/format';
+import { explorerUrlFor } from '../../src/lib/stats/links';
 import type { Stats } from '../../src/lib/stats/types';
 
 /** Counting starts here. Nothing before this date carries the tag. */
@@ -27,14 +28,7 @@ export function chainHelpers(registry: Registry): {
         // A chain that has since left the registry can only have been an EVM
         // one: Solana and Stellar are fixed sides.
         familyOf: (chain) => (chain === 'stellar' ? 'stellar' : (byId.get(chain)?.family ?? 'evm')),
-        explorerUrl: (chain, tx) => {
-            if (chain === 'stellar') return `${registry.stellar.explorer}/tx/${tx}`;
-            const entry = byId.get(chain);
-            if (!entry) return '';
-            if (entry.family === 'solana')
-                return `${entry.explorer}/tx/${tx}${entry.explorerSuffix}`;
-            return `${entry.explorer}/tx/${tx}`;
-        },
+        explorerUrl: explorerUrlFor(registry),
         destOf: (domain) => {
             if (domain === registry.stellar.domain) return 'stellar';
             return registry.chains.find((c) => c.domain === domain)?.id ?? null;
@@ -69,6 +63,16 @@ export function parseArgs(argv: string[]): {
     }
     return { data, only: only ? only.split(',').filter(Boolean) : null, budgetMs };
 }
+
+// An RPC's error text ends up in the coverage table. It is somebody else's
+// text, so it is printed as text: nothing in it may add a column, a line, a
+// link or markup to the published summary.
+const plain = (note: string) =>
+    note
+        .replace(/\|/g, '/')
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/[[<]/g, '(')
+        .replace(/[\]>]/g, ')');
 
 /** The README published with the data, for someone reading the branch directly. */
 export function summaryMarkdown(stats: Stats, labels: Record<string, string>): string {
@@ -108,8 +112,22 @@ export function summaryMarkdown(stats: Stats, labels: Record<string, string>): s
         '| Chain | Status | Scanned through | Note |',
         '| --- | --- | --- | --- |',
         ...stats.coverage.map(
-            (c) => `| ${name(c.chain)} | ${c.status} | ${c.through ?? 'never'} | ${c.note ?? ''} |`,
+            (c) =>
+                `| ${name(c.chain)} | ${c.status} | ${c.through ?? 'never'} | ${plain(c.note ?? '')} |`,
         ),
+        '',
+        '## Gaps',
+        '',
+        'Stretches that could not be read at all and cannot be read later, because the',
+        'node no longer keeps them. Transfers inside them may be missing from the totals.',
+        '',
+        ...(stats.gaps.length === 0
+            ? ['None recorded.']
+            : stats.gaps.map((g) =>
+                  g.from
+                      ? `- ${name(g.chain)}: nothing could be read from ${g.from} to ${g.to}.`
+                      : `- ${name(g.chain)}: nothing could be read before ${g.to}.`,
+              )),
         '',
         '## Files',
         '',

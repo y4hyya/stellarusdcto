@@ -91,7 +91,14 @@ describe('the summary published next to the data', () => {
         coverage: [
             { chain: 'base', status: 'ok', through: '2026-11-22T11:00:00.000Z' },
             { chain: 'xdc', status: 'error', through: null, note: 'timeout' },
+            {
+                chain: 'sei',
+                status: 'error',
+                through: null,
+                note: 'bad | reply\n[click](https://evil.example) <b>x</b>',
+            },
         ],
+        gaps: [{ chain: 'stellar', from: '2026-11-16T00:00:00Z', to: '2026-11-20T08:00:00Z' }],
     };
     const md = summaryMarkdown(stats, h.labels);
 
@@ -111,5 +118,23 @@ describe('the summary published next to the data', () => {
         expect(md).toContain('| Base | Stellar | 3 | 4 |');
         expect(md).toContain('| Base | ok | 2026-11-22T11:00:00.000Z |');
         expect(md).toContain('| XDC | error | never | timeout |');
+    });
+
+    test('an RPC error is printed as text: it cannot add columns, lines or links', () => {
+        const row = md.split('\n').find((line) => line.startsWith('| Sei |'));
+        expect(row).toBe(
+            '| Sei | error | never | bad / reply (click)(https://evil.example) (b)x(/b) |',
+        );
+    });
+
+    test('holes in what could be read are listed in plain words', () => {
+        expect(md).toContain('## Gaps');
+        expect(md).toContain(
+            '- Stellar: nothing could be read from 2026-11-16T00:00:00Z to 2026-11-20T08:00:00Z.',
+        );
+    });
+
+    test('without holes the section says so', () => {
+        expect(summaryMarkdown({ ...stats, gaps: [] }, h.labels)).toContain('None recorded.');
     });
 });

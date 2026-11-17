@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { run } from '../../scripts/stats/collect';
+import { run, type Scanners } from '../../scripts/stats/collect';
 import { MAINNET } from '../../src/lib/registry/index';
 import { parseStats } from '../../src/lib/stats/format';
 
@@ -96,5 +96,255 @@ describe('a run of the counting script', () => {
         const first = await run({ data, ...offline });
         const second = await run({ data, ...offline });
         expect({ ...second, generatedAt: '' }).toEqual({ ...first, generatedAt: '' });
+    });
+});
+
+// ─── with the scanners replaced ──────────────────────────────────────
+//
+// What a chain's scan returns is scripted here, so these tests are about
+// what the run does with it: what it saves, what it leaves alone, and what
+// it reports.
+
+const HASH = (n: number) => `0x${String(n).padStart(64, '0')}`;
+const burnOn = (chain: string, n: number) => ({
+    id: `${chain}:${HASH(n)}:0`,
+    chain,
+    tx: HASH(n),
+    time: '2026-11-17T10:00:00.000Z',
+    from: '0x00000000000000000000000000000000000000aa',
+    amount: '1000000',
+    destDomain: 27,
+    dest: 'stellar',
+    nonce: null,
+});
+
+const quiet: Scanners = {
+    scanEvmChain: async ({ entry, fromBlock }) => ({
+        records: [],
+        through: fromBlock ?? 10n,
+        seen: 0,
+        coverage: { chain: entry.id, status: 'ok', through: '2026-11-17T12:00:00.000Z' },
+    }),
+    scanSolana: async ({ entry, state }) => ({
+        records: [],
+        state,
+        seen: 0,
+        coverage: { chain: entry.id, status: 'ok', through: '2026-11-17T12:00:00.000Z' },
+    }),
+    scanStellar: async ({ fromLedger }) => ({
+        transfers: [],
+        mints: [],
+        through: fromLedger ?? 5,
+        seen: 0,
+        gap: null,
+        coverage: { chain: 'stellar', status: 'ok', through: '2026-11-17T12:00:00.000Z' },
+    }),
+    // No lookups at Circle in tests: burns keep whatever nonce they have.
+    resolveNonces: async (records) => records,
+};
+const live = { only: null, budgetMs: 1_000 };
+const readJson = (data: string, name: string) => JSON.parse(readFileSync(join(data, name), 'utf8'));
+
+describe('a run where chains succeed, fail and throw', () => {
+    test('one chain in error does not cost the others their results', async () => {
+        const data = dir();
+        writeFileSync(
+            join(data, 'checkpoints.json'),
+            JSON.stringify({ evm: { arbitrum: '50' }, solana: null, stellar: null, coverage: {} }),
+        );
+        const stats = await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanEvmChain: async (args) => {
+                    if (args.entry.id === 'base') {
+                        return {
+                            records: [burnOn('base', 1)],
+                            through: 100n,
+                            seen: 9,
+                            coverage: {
+                                chain: 'base',
+                                status: 'ok',
+                                through: '2026-11-17T12:00:00.000Z',
+                            },
+                        };
+                    }
+                    if (args.entry.id === 'arbitrum') {
+                        return {
+                            records: [],
+                            through: args.fromBlock,
+                            seen: 0,
+                            coverage: {
+                                chain: 'arbitrum',
+                                status: 'error',
+                                through: null,
+                                note: 'HTTP 503',
+                            },
+                        };
+                    }
+                    return quiet.scanEvmChain(args);
+                },
+            },
+        );
+
+        expect(stats.totals.transfers).toBe(1);
+        const checkpoints = readJson(data, 'checkpoints.json');
+        expect(checkpoints.evm.base).toBe('100');
+        // The failing chain stays exactly where it was.
+        expect(checkpoints.evm.arbitrum).toBe('50');
+        expect(stats.coverage.find((c) => c.chain === 'arbitrum')).toMatchObject({
+            status: 'error',
+        });
+        expect(stats.coverage.find((c) => c.chain === 'base')).toMatchObject({ status: 'ok' });
+        expect(readFileSync(join(data, 'transfers.jsonl'), 'utf8')).toContain(HASH(1));
+    });
+
+    test('a scanner that throws is recorded as an error for that chain only', async () => {
+        const data = dir();
+        const stats = await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanEvmChain: async (args) => {
+                    if (args.entry.id === 'op') throw new Error('something unexpected');
+                    if (args.entry.id === 'base') {
+                        return {
+                            ...(await quiet.scanEvmChain(args)),
+                            records: [burnOn('base', 2)],
+                        };
+                    }
+                    return quiet.scanEvmChain(args);
+                },
+                scanStellar: async () => {
+                    throw new Error('stellar scan broke');
+                },
+            },
+        );
+        expect(stats.totals.transfers).toBe(1);
+        expect(stats.coverage.find((c) => c.chain === 'op')).toEqual({
+            chain: 'op',
+            status: 'error',
+            through: null,
+            note: 'something unexpected',
+        });
+        expect(stats.coverage.find((c) => c.chain === 'stellar')).toMatchObject({
+            status: 'error',
+        });
+        expect(stats.coverage.filter((c) => c.status === 'ok')).toHaveLength(
+            stats.coverage.length - 2,
+        );
+    });
+
+    test('the same burn reported by two runs is counted once', async () => {
+        const data = dir();
+        const scanners: Scanners = {
+            ...quiet,
+            scanEvmChain: async (args) =>
+                args.entry.id === 'base'
+                    ? { ...(await quiet.scanEvmChain(args)), records: [burnOn('base', 3)] }
+                    : quiet.scanEvmChain(args),
+        };
+        await run({ data, ...live }, scanners);
+        const second = await run({ data, ...live }, scanners);
+        expect(second.totals.transfers).toBe(1);
+    });
+});
+
+describe('holes and unfinished scans survive from run to run', () => {
+    const hole = { to: '2026-11-19T08:00:00.000Z' };
+
+    test('a hole reported by the Stellar scan is published and kept on record', async () => {
+        const data = dir();
+        const first = await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanStellar: async (args) => ({ ...(await quiet.scanStellar(args)), gap: hole }),
+            },
+        );
+        // Nothing was read on Stellar before, so the hole starts at the counting date.
+        expect(first.gaps).toEqual([
+            { chain: 'stellar', from: '2026-11-16T00:00:00.000Z', to: hole.to },
+        ]);
+
+        // A later, healthy run still lists it: the data is gone for good.
+        const second = await run({ data, ...live }, quiet);
+        expect(second.gaps).toEqual(first.gaps);
+        expect(readFileSync(join(data, 'README.md'), 'utf8')).toContain(
+            'nothing could be read from',
+        );
+    });
+
+    test('a hole after earlier reading starts where the reading stopped, and is not listed twice', async () => {
+        const data = dir();
+        await run({ data, ...live }, quiet);
+        const withHole: Scanners = {
+            ...quiet,
+            scanStellar: async (args) => ({ ...(await quiet.scanStellar(args)), gap: hole }),
+        };
+        const first = await run({ data, ...live }, withHole);
+        expect(first.gaps).toEqual([
+            { chain: 'stellar', from: '2026-11-17T12:00:00.000Z', to: hole.to },
+        ]);
+        const again = await run({ data, ...live }, withHole);
+        expect(again.gaps).toHaveLength(1);
+    });
+
+    test('where an unfinished Solana scan stopped is handed back to the next run', async () => {
+        const data = dir();
+        const unfinished = { signature: 'sigA', resume: { before: 'sigB', newest: 'sigC' } };
+        await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanSolana: async ({ entry }) => ({
+                    records: [],
+                    state: unfinished,
+                    seen: 0,
+                    coverage: { chain: entry.id, status: 'behind', through: null },
+                }),
+            },
+        );
+        expect(readJson(data, 'checkpoints.json').solana).toEqual(unfinished);
+
+        let received: unknown;
+        await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanSolana: async (args) => {
+                    received = args.state;
+                    return quiet.scanSolana(args);
+                },
+            },
+        );
+        expect(received).toEqual(unfinished);
+    });
+
+    test('a checkpoint file from before these fields existed still loads', async () => {
+        const data = dir();
+        writeFileSync(
+            join(data, 'checkpoints.json'),
+            JSON.stringify({ evm: {}, solana: 'sigOld', stellar: 7, coverage: {} }),
+        );
+        let solanaState: unknown;
+        let stellarFrom: unknown;
+        const stats = await run(
+            { data, ...live },
+            {
+                ...quiet,
+                scanSolana: async (args) => {
+                    solanaState = args.state;
+                    return quiet.scanSolana(args);
+                },
+                scanStellar: async (args) => {
+                    stellarFrom = args.fromLedger;
+                    return quiet.scanStellar(args);
+                },
+            },
+        );
+        expect(solanaState).toEqual({ signature: 'sigOld' });
+        expect(stellarFrom).toBe(7);
+        expect(stats.gaps).toEqual([]);
     });
 });

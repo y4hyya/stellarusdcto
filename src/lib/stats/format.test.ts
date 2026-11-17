@@ -27,6 +27,7 @@ const valid = {
         },
     ],
     coverage: [{ chain: 'base', status: 'ok', through: '2026-11-22T11:00:00Z' }],
+    gaps: [{ chain: 'stellar', from: '2026-11-16T00:00:00Z', to: '2026-11-18T08:00:00Z' }],
 };
 
 describe('parseStats only accepts the shape the page can draw', () => {
@@ -35,7 +36,15 @@ describe('parseStats only accepts the shape the page can draw', () => {
     });
 
     test('an empty but well formed file is fine', () => {
-        const empty = { ...valid, daily: [], routes: [], recent: [], coverage: [] };
+        const empty = {
+            ...valid,
+            totals: { ...valid.totals, transfers: 0, volume: '0', wallets: 0 },
+            daily: [],
+            routes: [],
+            recent: [],
+            coverage: [],
+            gaps: [],
+        };
         expect(parseStats(empty)).toEqual(empty);
     });
 
@@ -64,6 +73,47 @@ describe('parseStats only accepts the shape the page can draw', () => {
         const noLink = structuredClone(valid);
         noLink.recent[0].url = '';
         expect(parseStats(noLink)).toEqual(noLink);
+    });
+
+    test('amounts too long to be real are refused before anything does arithmetic on them', () => {
+        const huge = '9'.repeat(400);
+        expect(parseStats({ ...valid, totals: { ...valid.totals, volume: huge } })).toBeNull();
+        expect(parseStats({ ...valid, daily: [{ ...valid.daily[0], volume: huge }] })).toBeNull();
+        expect(parseStats({ ...valid, routes: [{ ...valid.routes[0], volume: huge }] })).toBeNull();
+    });
+
+    test('transfers without a single day of history cannot be drawn and are refused', () => {
+        expect(parseStats({ ...valid, daily: [] })).toBeNull();
+    });
+
+    test('lists far longer than the script ever writes are refused', () => {
+        const day = (i: number) => ({
+            date: new Date(Date.UTC(2020, 0, 1 + i)).toISOString().slice(0, 10),
+            transfers: 0,
+            volume: '0',
+            newWallets: 0,
+        });
+        const many = Array.from({ length: 401 }, (_, i) => day(i));
+        expect(parseStats({ ...valid, daily: many })).toBeNull();
+        expect(parseStats({ ...valid, daily: many.slice(0, 400) })).not.toBeNull();
+        const recent = Array.from({ length: 51 }, () => valid.recent[0]);
+        expect(parseStats({ ...valid, recent })).toBeNull();
+    });
+
+    test('counts must be whole, safe numbers', () => {
+        expect(parseStats({ ...valid, totals: { ...valid.totals, transfers: 1e21 } })).toBeNull();
+        expect(parseStats({ ...valid, totals: { ...valid.totals, wallets: 1.5 } })).toBeNull();
+    });
+
+    test('the list of known holes must be present and well formed', () => {
+        expect(parseStats({ ...valid, gaps: undefined })).toBeNull();
+        expect(parseStats({ ...valid, gaps: [{ chain: 'stellar' }] })).toBeNull();
+        expect(parseStats({ ...valid, gaps: [{ chain: 'stellar', from: null, to: 'x' }] })).toEqual(
+            {
+                ...valid,
+                gaps: [{ chain: 'stellar', from: null, to: 'x' }],
+            },
+        );
     });
 
     test('a link that is not https is refused, since the page renders it as a link', () => {

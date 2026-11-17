@@ -44,6 +44,13 @@ export type ChainCoverage = {
     note?: string;
 };
 
+/**
+ * A stretch of time on one chain that could not be read and never will be
+ * from an RPC (Stellar nodes keep about seven days). Transfers inside it may
+ * be missing from the totals. `from` is null when the start is not known.
+ */
+export type CoverageGap = { chain: string; from: string | null; to: string };
+
 export type Stats = {
     schema: 1;
     generatedAt: string;
@@ -70,4 +77,5 @@ export type Stats = {
         url: string;
     }[];
     coverage: ChainCoverage[];
+    gaps: CoverageGap[];
 };

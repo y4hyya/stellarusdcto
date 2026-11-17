@@ -15,7 +15,7 @@ import {
     getDepositForBurnWithHookInstructionDataDecoder,
 } from '../../src/lib/solana/generated/token-messenger-minter';
 import type { ChainCoverage, TransferRecord } from '../../src/lib/stats/types';
-import { describeError, jsonRpc, mapLimit } from './rpc';
+import { describeError, jsonRpc, mapLimit, type RpcCall } from './rpc';
 
 // ─── reading a burn out of a transaction ─────────────────────────────
 
@@ -96,117 +96,174 @@ export type SignatureInfo = {
 };
 
 /**
- * Collect a program's transactions from the newest back to where the last run
- * stopped. `fetchPage(before)` returns one page, newest first, ending at the
- * checkpoint if there is one. A first run has no checkpoint and stops at
- * `sinceSec` instead.
+ * How a pass over the history ended.
  *
- * `complete` is false when time ran out before reaching that point. The
- * caller must then leave its checkpoint alone: the history between where
- * this stopped and the old checkpoint has not been read.
+ *   reached    the checkpoint signature was seen, or (on a first run) an
+ *              entry older than the counting start. Everything newer was read.
+ *   exhausted  the node ran out of history first. A short page only proves
+ *              this node has nothing older; it does not prove the checkpoint
+ *              was passed. Nothing may be marked as read on this evidence.
+ *   timeout    time ran out. `lastSeen` is where to pick up.
+ */
+export type PagingOutcome = 'reached' | 'exhausted' | 'timeout';
+
+/**
+ * Read a program's transactions from the newest back towards the checkpoint,
+ * a page at a time. `fetchPage(before)` returns one page, newest first.
  */
 export async function collectSignatures(args: {
     fetchPage: (before: string | null) => Promise<SignatureInfo[]>;
+    /** The newest signature the last finished scan saw; null on a first run. */
+    checkpoint: string | null;
     sinceSec: number;
     deadline: number;
     now: () => number;
     pageSize: number;
-}): Promise<{ entries: SignatureInfo[]; complete: boolean }> {
+    /** Where an earlier, unfinished pass stopped. */
+    startBefore?: string | null;
+}): Promise<{ entries: SignatureInfo[]; outcome: PagingOutcome; lastSeen: string | null }> {
     const entries: SignatureInfo[] = [];
-    let before: string | null = null;
+    let before = args.startBefore ?? null;
+    let lastSeen = before;
     for (;;) {
-        if (args.now() >= args.deadline) return { entries, complete: false };
+        if (args.now() >= args.deadline) return { entries, outcome: 'timeout', lastSeen };
         const page = await args.fetchPage(before);
         for (const entry of page) {
+            if (args.checkpoint !== null && entry.signature === args.checkpoint) {
+                return { entries, outcome: 'reached', lastSeen };
+            }
             if (entry.blockTime !== null && entry.blockTime < args.sinceSec) {
-                return { entries, complete: true };
+                return { entries, outcome: 'reached', lastSeen };
             }
             entries.push(entry);
+            lastSeen = entry.signature;
         }
-        if (page.length < args.pageSize) return { entries, complete: true };
+        if (page.length < args.pageSize) return { entries, outcome: 'exhausted', lastSeen };
         before = page[page.length - 1].signature;
     }
 }
+
+/**
+ * Where the Solana scan stands between runs. `signature` is the newest
+ * transaction of the last pass that read all the way back. `resume` is set
+ * while a pass is unfinished: where it stopped, and the newest transaction it
+ * started from, which becomes the checkpoint once it finishes.
+ */
+export type SolanaCheckpoint = {
+    signature: string | null;
+    resume?: { before: string; newest: string };
+};
 
 const PAGE_SIZE = 1_000;
 
 export async function scanSolana(args: {
     entry: SolanaChainEntry;
     rpcUrls: readonly string[];
-    /** Newest signature the last run saw, or null on the first run. */
-    untilSignature: string | null;
+    state: SolanaCheckpoint;
     since: Date;
     deadline: number;
     destOf: (domain: number) => string | null;
     /** Which memos count; the usage tag unless a check passes another. */
     matches?: (memo: string | null) => boolean;
+    now?: () => number;
+    pageSize?: number;
+    /** How to reach one endpoint; replaced in tests. */
+    callFor?: (url: string) => RpcCall;
 }): Promise<{
     records: TransferRecord[];
-    newest: string | null;
+    state: SolanaCheckpoint;
     /** Transactions of the program examined, tagged or not. */
     seen: number;
     coverage: ChainCoverage;
 }> {
-    const { entry } = args;
-    const call = jsonRpc(args.rpcUrls);
+    const { entry, state } = args;
     const matches = args.matches ?? memoHasTag;
-    try {
-        const { entries, complete } = await collectSignatures({
-            fetchPage: async (before) =>
-                (await call('getSignaturesForAddress', [
-                    entry.tokenMessengerMinter,
-                    {
-                        limit: PAGE_SIZE,
-                        ...(before ? { before } : {}),
-                        ...(args.untilSignature ? { until: args.untilSignature } : {}),
-                    },
-                ])) as SignatureInfo[],
-            sinceSec: Math.floor(args.since.getTime() / 1000),
-            deadline: args.deadline,
-            now: Date.now,
-            pageSize: PAGE_SIZE,
-        });
+    const now = args.now ?? Date.now;
+    const pageSize = args.pageSize ?? PAGE_SIZE;
+    const callFor = args.callFor ?? ((url: string) => jsonRpc([url]));
 
-        const tagged = entries.filter((e) => !e.err && matches(e.memo));
-        const found = await mapLimit(tagged, 4, async (info) => {
-            const tx = (await call('getTransaction', [
-                info.signature,
-                { encoding: 'json', maxSupportedTransactionVersion: 0 },
-            ])) as SolanaTx | null;
-            if (!tx) throw new Error(`transaction ${info.signature} was not returned`);
-            const seconds = tx.blockTime ?? info.blockTime ?? 0;
-            return decodeSolanaBurns(tx, entry.tokenMessengerMinter).map(
-                (burn): TransferRecord => ({
-                    id: `${entry.id}:${info.signature}:${burn.index}`,
-                    chain: entry.id,
-                    tx: info.signature,
-                    time: new Date(seconds * 1000).toISOString(),
-                    from: burn.owner,
-                    amount: burn.amount.toString(),
-                    destDomain: burn.destDomain,
-                    dest: args.destOf(burn.destDomain),
-                    nonce: null,
-                }),
-            );
-        });
+    // One endpoint reads the whole pass. Switching endpoints half way through
+    // would stitch together two different views of the history, and a node
+    // with less history would end the pass early without saying so.
+    let problem = 'no RPC endpoint configured';
+    for (const url of args.rpcUrls) {
+        const call = callFor(url);
+        try {
+            const { entries, outcome, lastSeen } = await collectSignatures({
+                fetchPage: async (before) =>
+                    (await call('getSignaturesForAddress', [
+                        entry.tokenMessengerMinter,
+                        { limit: pageSize, ...(before ? { before } : {}) },
+                    ])) as SignatureInfo[],
+                checkpoint: state.signature,
+                sinceSec: Math.floor(args.since.getTime() / 1000),
+                deadline: args.deadline,
+                now,
+                pageSize,
+                startBefore: state.resume?.before ?? null,
+            });
+            if (outcome === 'exhausted') {
+                problem = 'the history this endpoint keeps ends before the last checkpoint';
+                continue;
+            }
 
-        return {
-            records: found.flat(),
-            // Only a run that read all the way back may move the checkpoint.
-            newest: complete ? (entries[0]?.signature ?? args.untilSignature) : args.untilSignature,
-            seen: entries.length,
-            coverage: {
-                chain: entry.id,
-                status: complete ? 'ok' : 'behind',
-                through: complete ? new Date().toISOString() : null,
-            },
-        };
-    } catch (err) {
-        return {
-            records: [],
-            newest: args.untilSignature,
-            seen: 0,
-            coverage: { chain: entry.id, status: 'error', through: null, note: describeError(err) },
-        };
+            const tagged = entries.filter((e) => !e.err && matches(e.memo));
+            const found = await mapLimit(tagged, 4, async (info) => {
+                const tx = (await call('getTransaction', [
+                    info.signature,
+                    { encoding: 'json', maxSupportedTransactionVersion: 0 },
+                ])) as SolanaTx | null;
+                if (!tx) throw new Error(`transaction ${info.signature} was not returned`);
+                const seconds = tx.blockTime ?? info.blockTime ?? 0;
+                return decodeSolanaBurns(tx, entry.tokenMessengerMinter).map(
+                    (burn): TransferRecord => ({
+                        id: `${entry.id}:${info.signature}:${burn.index}`,
+                        chain: entry.id,
+                        tx: info.signature,
+                        time: new Date(seconds * 1000).toISOString(),
+                        from: burn.owner,
+                        amount: burn.amount.toString(),
+                        destDomain: burn.destDomain,
+                        dest: args.destOf(burn.destDomain),
+                        nonce: null,
+                    }),
+                );
+            });
+
+            // The newest transaction of this pass: remembered from the run
+            // that started it, or the first entry just read.
+            const newest = state.resume?.newest ?? entries[0]?.signature ?? null;
+            if (outcome === 'reached') {
+                return {
+                    records: found.flat(),
+                    state: { signature: newest ?? state.signature },
+                    seen: entries.length,
+                    coverage: { chain: entry.id, status: 'ok', through: new Date().toISOString() },
+                };
+            }
+            // Out of time: the checkpoint stays, and the place is kept.
+            return {
+                records: found.flat(),
+                state: {
+                    signature: state.signature,
+                    ...(lastSeen && newest
+                        ? { resume: { before: lastSeen, newest } }
+                        : state.resume
+                          ? { resume: state.resume }
+                          : {}),
+                },
+                seen: entries.length,
+                coverage: { chain: entry.id, status: 'behind', through: null },
+            };
+        } catch (err) {
+            problem = describeError(err);
+        }
     }
+
+    return {
+        records: [],
+        state,
+        seen: 0,
+        coverage: { chain: entry.id, status: 'error', through: null, note: problem },
+    };
 }
