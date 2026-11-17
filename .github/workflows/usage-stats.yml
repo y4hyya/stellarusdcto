@@ -4,6 +4,12 @@ name: Usage stats
 # totals the /stats page reads. It reads public RPCs only and uses no secrets,
 # so anyone can run scripts/stats/collect.ts and get the same numbers. The
 # data is committed to the `stats` branch, never to main.
+#
+# Two jobs on purpose. `collect` installs dependencies and runs the script, so
+# it gets a read only token: nothing it runs can write to the repository.
+# `publish` holds the write token and runs no dependency code at all, only a
+# checkout, a download of what `collect` produced, and the repo's own script
+# that commits it to the data branch.
 
 on:
     schedule:
@@ -11,7 +17,7 @@ on:
     workflow_dispatch:
 
 permissions:
-    contents: write
+    contents: read
 
 concurrency:
     group: usage-stats
@@ -33,4 +39,24 @@ jobs:
             # Each chain gets ten minutes; one that does not finish continues
             # on the next run and says so in the coverage table.
             - run: pnpm exec tsx scripts/stats/collect.ts --data stats-data --budget-ms 600000
+            - uses: actions/upload-artifact@v4
+              with:
+                  name: usage-stats
+                  path: stats-data
+                  if-no-files-found: error
+                  retention-days: 3
+
+    publish:
+        needs: collect
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: write
+        steps:
+            - uses: actions/checkout@v4
+            - run: bash scripts/stats/data-branch.sh open stats-data
+            - uses: actions/download-artifact@v4
+              with:
+                  name: usage-stats
+                  path: stats-data
             - run: bash scripts/stats/data-branch.sh save stats-data

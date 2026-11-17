@@ -6,11 +6,24 @@
 #   data-branch.sh save <dir>   commit and push <dir> if anything changed
 #
 # The data lives on its own branch so the main branch history stays about the
-# code. Used by .github/workflows/usage-stats.yml; safe to run by hand.
+# code. Used by .github/workflows/usage-stats.yml.
+#
+# The remote is never guessed outside CI. In a GitHub Actions checkout
+# `origin` is this repository. In a local clone it may be somebody else's (in
+# the owner's checkout it is the upstream project), so by hand the remote has
+# to be named: STATS_REMOTE=<remote> data-branch.sh ...
 set -euo pipefail
 
 BRANCH="${STATS_BRANCH:-stats}"
-REMOTE="${STATS_REMOTE:-origin}"
+if [ -n "${STATS_REMOTE:-}" ]; then
+    REMOTE="$STATS_REMOTE"
+elif [ "${GITHUB_ACTIONS:-}" = "true" ]; then
+    REMOTE="origin"
+else
+    echo "data-branch.sh: set STATS_REMOTE to the remote that holds the stats branch." >&2
+    echo "It is not guessed outside CI, because origin may be another project's repository." >&2
+    exit 2
+fi
 
 usage() {
     echo "usage: data-branch.sh open|save <dir>" >&2
