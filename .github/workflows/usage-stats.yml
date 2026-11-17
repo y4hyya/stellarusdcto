@@ -1,0 +1,36 @@
+name: Usage stats
+
+# Counts the transfers that carry the public usage tag and publishes the
+# totals the /stats page reads. It reads public RPCs only and uses no secrets,
+# so anyone can run scripts/stats/collect.ts and get the same numbers. The
+# data is committed to the `stats` branch, never to main.
+
+on:
+    schedule:
+        - cron: '17 5 * * *'
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+concurrency:
+    group: usage-stats
+    cancel-in-progress: false
+
+jobs:
+    collect:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@v4
+            - uses: pnpm/action-setup@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: 22
+                  cache: pnpm
+            - run: pnpm install --frozen-lockfile
+            - run: bash scripts/stats/data-branch.sh open stats-data
+            # Each chain gets ten minutes; one that does not finish continues
+            # on the next run and says so in the coverage table.
+            - run: pnpm exec tsx scripts/stats/collect.ts --data stats-data --budget-ms 600000
+            - run: bash scripts/stats/data-branch.sh save stats-data
