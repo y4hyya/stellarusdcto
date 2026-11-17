@@ -20,6 +20,7 @@ import {
 import { inputHasTag } from '../../src/lib/attribution/tag';
 import type { EvmChainEntry } from '../../src/lib/registry/types';
 import type { ChainCoverage, TransferRecord } from '../../src/lib/stats/types';
+import { describeError, mapLimit } from './rpc';
 
 const depositForBurnEvent = parseAbiItem(
     'event DepositForBurn(address indexed burnToken, uint256 amount, address indexed depositor, bytes32 mintRecipient, uint32 destinationDomain, bytes32 destinationTokenMessenger, bytes32 destinationCaller, uint256 maxFee, uint32 indexed minFinalityThreshold, bytes hookData)',
@@ -66,8 +67,6 @@ export function burnRecord(args: {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
-const describe = (err: unknown) =>
-    (err instanceof Error ? err.message : String(err)).split('\n')[0].slice(0, 200);
 
 // Widths public RPCs are known to cap log queries at, widest first. Stepping
 // down through these lands exactly on a node's limit; plain halving would
@@ -116,7 +115,7 @@ export async function runRanges(args: {
             } else {
                 failuresAtOneBlock += 1;
                 if (failuresAtOneBlock >= 3) {
-                    return { through, complete: false, span, error: describe(err) };
+                    return { through, complete: false, span, error: describeError(err) };
                 }
             }
             await pause(250);
@@ -160,23 +159,6 @@ export async function firstBlockAtOrAfter(args: {
         else hi = mid;
     }
     return hi;
-}
-
-async function mapLimit<T, R>(
-    items: T[],
-    limit: number,
-    fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-    const results = new Array<R>(items.length);
-    let next = 0;
-    const worker = async () => {
-        while (next < items.length) {
-            const index = next++;
-            results[index] = await fn(items[index]);
-        }
-    };
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-    return results;
 }
 
 // Stay this far behind the head so a reorganised block is never counted.
@@ -319,7 +301,7 @@ export async function scanEvmChain(args: {
             through,
             span,
             seen,
-            coverage: { chain: entry.id, status: 'error', through: null, note: describe(err) },
+            coverage: { chain: entry.id, status: 'error', through: null, note: describeError(err) },
         };
     }
 }
