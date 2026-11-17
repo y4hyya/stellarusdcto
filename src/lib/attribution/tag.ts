@@ -66,7 +66,7 @@ export const STELLAR_TAG_MIN_TIME = 1752133747;
 // Only the official sites tag, so forks, previews and local runs never add to
 // the numbers. The mainnet site joins this list once one real transfer per
 // chain family has been checked on the testnet site.
-export const TAGGED_HOSTS: readonly string[] = ['stellarusdcto-testnet.vercel.app'];
+export const TAGGED_HOSTS: readonly string[] = ['testnet.stablehops.com'];
 
 /** Local development can switch the tag on to test it: set this key to "on". */
 export const TAG_DEV_FLAG_KEY = 'stellarusdcto.tag';

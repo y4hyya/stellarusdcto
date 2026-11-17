@@ -11,6 +11,7 @@ import {
     minTimeIsTag,
     tagEnabled,
 } from './tag';
+import { SITE_URLS } from '../registry/index';
 
 describe('the EVM suffix follows the ERC-8021 schema 0 layout', () => {
     test('encodes the spec vector', () => {
@@ -42,16 +43,24 @@ describe('the EVM suffix follows the ERC-8021 schema 0 layout', () => {
 
 describe('where the tag is switched on', () => {
     test('only listed hosts tag, in any letter case', () => {
-        expect(TAGGED_HOSTS).toEqual(['stellarusdcto-testnet.vercel.app']);
-        expect(isTagHost('stellarusdcto-testnet.vercel.app', null)).toBe(true);
-        expect(isTagHost('STELLARUSDCTO-TESTNET.vercel.app', null)).toBe(true);
-        expect(isTagHost('stellarusdcto.vercel.app', null)).toBe(false);
+        expect(TAGGED_HOSTS).toEqual(['testnet.stablehops.com']);
+        expect(isTagHost('testnet.stablehops.com', null)).toBe(true);
+        expect(isTagHost('TESTNET.StableHops.com', null)).toBe(true);
+        expect(isTagHost('stablehops.com', null)).toBe(false);
+    });
+
+    test('every listed host is one of the official sites', () => {
+        // A typo here, or a site that moved without this list following,
+        // would silently send every transfer out untagged and uncounted.
+        const official = Object.values(SITE_URLS).map((url) => new URL(url).hostname);
+        for (const host of TAGGED_HOSTS) expect(official).toContain(host);
     });
 
     test('previews and forks never tag, even with the dev flag', () => {
-        expect(isTagHost('stellarusdcto-git-x.vercel.app', 'on')).toBe(false);
+        expect(isTagHost('nice-rock-0a1b2c3d4.5.azurestaticapps.net', 'on')).toBe(false);
+        expect(isTagHost('www.stablehops.com', 'on')).toBe(false);
         expect(isTagHost('example.com', 'on')).toBe(false);
-        expect(isTagHost('stellarusdcto-testnet.vercel.app.evil.example', null)).toBe(false);
+        expect(isTagHost('testnet.stablehops.com.evil.example', null)).toBe(false);
     });
 
     test('localhost tags only with the dev flag', () => {

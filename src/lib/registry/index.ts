@@ -14,8 +14,8 @@ export { TESTNET, MAINNET };
 const ENV_STORAGE_KEY = 'stellarusdcto.env';
 
 export const SITE_URLS = {
-    mainnet: 'https://stellarusdcto.vercel.app',
-    testnet: 'https://stellarusdcto-testnet.vercel.app',
+    mainnet: 'https://stablehops.com',
+    testnet: 'https://testnet.stablehops.com',
 } as const;
 
 function isLocalHostname(hostname: string): boolean {
@@ -27,9 +27,9 @@ export function resolveEnv(hostname: string | undefined, stored: string | null):
     if (hostname) {
         const h = hostname.toLowerCase();
         if (!isLocalHostname(h)) {
-            return h.startsWith('stellarusdcto-testnet') || h.startsWith('testnet.')
-                ? 'testnet'
-                : 'mainnet';
+            // Only a first label of "testnet" makes a testnet site. Anything
+            // else, including a copy on someone else's domain, is mainnet.
+            return h.startsWith('testnet.') ? 'testnet' : 'mainnet';
         }
     }
     return stored === 'mainnet' || stored === 'testnet' ? stored : 'testnet';

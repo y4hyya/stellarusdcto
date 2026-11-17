@@ -68,8 +68,7 @@ function fakeWallet() {
     return { wallet: wallet as never, walletClient };
 }
 
-const tagOn = () =>
-    vi.stubGlobal('location', { hostname: 'stellarusdcto-testnet.vercel.app' } as Location);
+const tagOn = () => vi.stubGlobal('location', { hostname: 'testnet.stablehops.com' } as Location);
 
 beforeEach(() => {
     node.simulateContract.mockReset().mockResolvedValue({});
