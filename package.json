@@ -15,7 +15,8 @@
         "test:watch": "vitest",
         "lint": "prettier --check . && eslint .",
         "format": "prettier --write . && cargo fmt",
-        "gen:solana-cctp": "node scripts/gen-solana-cctp.mjs"
+        "gen:solana-cctp": "node scripts/gen-solana-cctp.mjs",
+        "stats": "tsx scripts/stats/collect.ts"
     },
     "devDependencies": {
         "@codama/nodes-from-anchor": "^1.5.3",

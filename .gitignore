@@ -30,3 +30,6 @@ target
 /.claude
 CLAUDE.md
 /notes
+
+# Local output of the usage stats script (published from CI on its own branch)
+/stats-data

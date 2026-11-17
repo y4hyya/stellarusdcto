@@ -60,6 +60,12 @@ describe('parseStats only accepts the shape the page can draw', () => {
         expect(parseStats({ ...valid, coverage: [{ chain: 'base', status: 'great' }] })).toBeNull();
     });
 
+    test('a transfer without a link is fine: it is shown as plain text', () => {
+        const noLink = structuredClone(valid);
+        noLink.recent[0].url = '';
+        expect(parseStats(noLink)).toEqual(noLink);
+    });
+
     test('a link that is not https is refused, since the page renders it as a link', () => {
         const bad = structuredClone(valid);
         bad.recent[0].url = 'javascript:alert(1)';

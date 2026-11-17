@@ -72,14 +72,25 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 // down through these lands exactly on a node's limit; plain halving would
 // undershoot it (a 100 block limit would end up scanned 62 blocks at a time).
 const SPAN_STEPS = [10_000n, 5_000n, 2_000n, 1_000n, 500n, 100n, 50n, 10n, 1n];
+const stepBelow = (span: bigint) => SPAN_STEPS.find((step) => step < span) ?? 1n;
+const stepAbove = (span: bigint, cap: bigint) => {
+    const above = [...SPAN_STEPS].reverse().find((step) => step > span) ?? cap;
+    return above > cap ? cap : above;
+};
+// Successes in a row before a narrowed width is tried one step wider again.
+const RECOVER_AFTER = 8;
 
 /**
  * Walk from..to in ranges, calling `scan` for each. Public RPCs disagree
  * about how wide a log query may be (anywhere from 50 blocks to tens of
- * thousands) and say so in different words, so the width is found by trying:
- * any failure steps it down, and it stays at whatever worked for the rest of
- * the run. Three failures in a row at a single block mean the RPC is not
- * answering at all.
+ * thousands) and say so in different words, so the width is found by trying.
+ *
+ * A request that fails is tried once more as it is: a rate limit or a dropped
+ * connection says nothing about the range. Failing twice in a row steps the
+ * width down. After a run of successes a narrowed width is tried one step
+ * wider again, so a passing outage does not slow the rest of the run; if that
+ * trial fails the node's limit is real and it is not tried again. Three
+ * failures in a row at a single block mean the RPC is not answering at all.
  *
  * `through` is the last block of the last range that completed. It only ever
  * moves forward over blocks that were really scanned, which is what makes it
@@ -97,9 +108,12 @@ export async function runRanges(args: {
 }): Promise<{ through: bigint; complete: boolean; span: bigint; error?: string }> {
     const pause = args.pause ?? sleep;
     let span = args.initialSpan < 1n ? 1n : args.initialSpan;
+    let ceiling = span; // never tried wider than this again
+    let widenedFrom: bigint | null = null; // set while a wider width is on trial
+    let successes = 0; // in a row, at the current width
+    let failures = 0; // in a row, on the current range
     let cursor = args.from;
     let through = args.from - 1n;
-    let failuresAtOneBlock = 0;
 
     while (cursor <= args.to) {
         if (args.now() >= args.deadline) return { through, complete: false, span };
@@ -108,17 +122,32 @@ export async function runRanges(args: {
             await args.scan(cursor, end);
             through = end;
             cursor = end + 1n;
-            failuresAtOneBlock = 0;
+            failures = 0;
+            successes += 1;
+            widenedFrom = null;
+            if (span < ceiling && successes >= RECOVER_AFTER) {
+                widenedFrom = span;
+                span = stepAbove(span, ceiling);
+                successes = 0;
+            }
         } catch (err) {
-            if (span > 1n) {
-                span = SPAN_STEPS.find((step) => step < span) ?? 1n;
-            } else {
-                failuresAtOneBlock += 1;
-                if (failuresAtOneBlock >= 3) {
+            failures += 1;
+            successes = 0;
+            if (failures >= 2) {
+                if (widenedFrom !== null) {
+                    // The wider width on trial failed: this node's limit is real.
+                    ceiling = widenedFrom;
+                    span = widenedFrom;
+                    widenedFrom = null;
+                    failures = 0;
+                } else if (span > 1n) {
+                    span = stepBelow(span);
+                    failures = 0;
+                } else if (failures >= 3) {
                     return { through, complete: false, span, error: describeError(err) };
                 }
             }
-            await pause(250);
+            await pause(500);
         }
     }
     return { through, complete: true, span };
@@ -161,10 +190,116 @@ export async function firstBlockAtOrAfter(args: {
     return hi;
 }
 
+// ─── transaction inputs ──────────────────────────────────────────────
+
+type Post = (url: string, body: unknown) => Promise<unknown>;
+
+async function httpPost(url: string, body: unknown): Promise<unknown> {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} from ${new URL(url).host}`);
+    return res.json();
+}
+
+const lookup = (hash: string, id: number) => ({
+    jsonrpc: '2.0',
+    id,
+    method: 'eth_getTransactionByHash',
+    params: [hash],
+});
+
+const inputOf = (reply: unknown): string | null => {
+    const result = (reply as { result?: { input?: unknown } } | null)?.result;
+    return result && typeof result.input === 'string' ? result.input : null;
+};
+
+const BATCH = 25;
+const SINGLE_CONCURRENCY = 8;
+// Endpoints found to answer single requests but not batches, for this run.
+const refusesBatches = new Set<string>();
+
+/**
+ * The input of each transaction, by hash. This is the bulk of a scan (one
+ * lookup per burn on the chain), so it is batched wherever the endpoint
+ * allows, which is ten times faster than asking one at a time.
+ *
+ * Endpoints are asked in order, each only for what the ones before it could
+ * not return: public nodes do sometimes serve a log and then answer null for
+ * its transaction. A transaction nobody returns fails the range. Skipping it
+ * could silently drop a tagged burn from the count.
+ */
+export async function fetchInputs(args: {
+    urls: readonly string[];
+    hashes: readonly Hex[];
+    post?: Post;
+}): Promise<Map<Hex, string>> {
+    const post = args.post ?? httpPost;
+    const inputs = new Map<Hex, string>();
+    let missing = [...new Set(args.hashes)];
+
+    for (const url of args.urls) {
+        if (missing.length === 0) break;
+
+        if (!refusesBatches.has(url)) {
+            try {
+                for (let i = 0; i < missing.length; i += BATCH) {
+                    const chunk = missing.slice(i, i + BATCH);
+                    const replies = await post(
+                        url,
+                        chunk.map((hash, id) => lookup(hash, id)),
+                    );
+                    if (!Array.isArray(replies)) throw new Error('not a batch reply');
+                    for (const reply of replies) {
+                        const hash = chunk[(reply as { id?: number }).id ?? -1];
+                        const input = inputOf(reply);
+                        if (hash && input !== null) inputs.set(hash, input);
+                    }
+                }
+            } catch {
+                // Either this endpoint does not take batches or it is not
+                // answering at all. One single request tells which, so a dead
+                // endpoint costs two requests rather than one per transaction.
+                const probe = missing.find((hash) => !inputs.has(hash));
+                try {
+                    if (probe) {
+                        const input = inputOf(await post(url, lookup(probe, 0)));
+                        if (input !== null) inputs.set(probe, input);
+                    }
+                    refusesBatches.add(url);
+                } catch {
+                    missing = missing.filter((hash) => !inputs.has(hash));
+                    continue;
+                }
+            }
+        }
+
+        if (refusesBatches.has(url)) {
+            const todo = missing.filter((hash) => !inputs.has(hash));
+            await mapLimit(todo, SINGLE_CONCURRENCY, async (hash) => {
+                try {
+                    const input = inputOf(await post(url, lookup(hash, 0)));
+                    if (input !== null) inputs.set(hash, input);
+                } catch {
+                    // Left for the next endpoint.
+                }
+            });
+        }
+        missing = missing.filter((hash) => !inputs.has(hash));
+    }
+
+    if (missing.length > 0) {
+        throw new Error(`transaction ${missing[0]} was not returned by any endpoint`);
+    }
+    return inputs;
+}
+
 // Stay this far behind the head so a reorganised block is never counted.
 const CONFIRMATIONS = 64n;
 export const DEFAULT_SPAN = 2_000n;
-const TX_CONCURRENCY = 6;
 
 type RpcLog = {
     topics: Hex[];
@@ -249,10 +384,9 @@ export async function scanEvmChain(args: {
                 })) as unknown as RpcLog[];
                 if (logs.length === 0) return;
 
-                const hashes = [...new Set(logs.map((log) => log.transactionHash))];
-                const inputs = new Map<Hex, string>();
-                await mapLimit(hashes, TX_CONCURRENCY, async (hash) => {
-                    inputs.set(hash, (await client.getTransaction({ hash })).input);
+                const inputs = await fetchInputs({
+                    urls: args.rpcUrls,
+                    hashes: logs.map((log) => log.transactionHash),
                 });
 
                 // Collected per range and added only once the whole range is

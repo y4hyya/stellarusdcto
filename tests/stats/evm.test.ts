@@ -3,6 +3,7 @@ import {
     DEPOSIT_FOR_BURN_TOPIC,
     burnRecord,
     decodeBurnLog,
+    fetchInputs,
     firstBlockAtOrAfter,
     runRanges,
 } from '../../scripts/stats/evm';
@@ -136,8 +137,9 @@ describe('walking a block range', () => {
         expect(result.through).toBe(999n);
         expectContiguous(s.done, 0n, 999n);
         for (const [a, b] of s.done) expect(b - a + 1n <= 100n).toBe(true);
-        // It does not keep probing the refused width after learning the limit.
-        expect(s.attempts.filter(([a, b]) => b - a + 1n > 100n).length).toBeLessThanOrEqual(4);
+        // Each refused width is tried twice on the way down (once could be a
+        // hiccup), and one step back up is tried once later. Never more.
+        expect(s.attempts.filter(([a, b]) => b - a + 1n > 100n).length).toBeLessThanOrEqual(6);
         // Widths step down through the limits public RPCs actually use, so a
         // 100 block limit is met exactly instead of undershot.
         expect(result.span).toBe(100n);
@@ -155,6 +157,52 @@ describe('walking a block range', () => {
         const b = await runRanges({ ...base, from: 0n, to: 4n, scan: one.scan });
         expect(b).toMatchObject({ complete: true, through: 4n, span: 1n });
         expectContiguous(one.done, 0n, 4n);
+    });
+
+    test('a hard limit is probed a bounded number of times however long the range', async () => {
+        const s = scripted((from, to) => (to - from + 1n > 100n ? 'block range too large' : null));
+        const result = await runRanges({ ...base, from: 0n, to: 9_999n, scan: s.scan });
+        expect(result.complete).toBe(true);
+        expectContiguous(s.done, 0n, 9_999n);
+        expect(s.done).toHaveLength(100);
+        expect(s.attempts.length - s.done.length).toBeLessThanOrEqual(6);
+    });
+
+    test('one failed request is retried at the same width, not answered by narrowing', async () => {
+        // A rate limit or a dropped connection says nothing about the range.
+        let failed = false;
+        const s = scripted((from) => {
+            if (from === 2_000n && !failed) {
+                failed = true;
+                return 'HTTP 429';
+            }
+            return null;
+        });
+        const result = await runRanges({ ...base, from: 0n, to: 4_999n, scan: s.scan });
+        expect(result).toMatchObject({ complete: true, through: 4_999n, span: 1_000n });
+        expect(s.done).toHaveLength(5);
+        expectContiguous(s.done, 0n, 4_999n);
+    });
+
+    test('a width narrowed by a passing problem recovers once requests succeed again', async () => {
+        let failures = 0;
+        const s = scripted((from) => {
+            // The same request fails twice in a row, once: an outage, not a limit.
+            if (from === 1_000n && failures < 2) {
+                failures += 1;
+                return 'connection reset';
+            }
+            return null;
+        });
+        const result = await runRanges({ ...base, from: 0n, to: 19_999n, scan: s.scan });
+        expect(result.complete).toBe(true);
+        expectContiguous(s.done, 0n, 19_999n);
+        const widths = s.done.map(([a, b]) => b - a + 1n);
+        expect(widths[0]).toBe(1_000n);
+        expect(widths[1]).toBe(500n);
+        // Back at the full width by the end.
+        expect(widths[widths.length - 1]).toBe(1_000n);
+        expect(result.span).toBe(1_000n);
     });
 
     test('an RPC that dies part way: progress stops at the last range that completed', async () => {
@@ -248,5 +296,107 @@ describe('finding where to start on a first run', () => {
     test('a target before the chain existed starts at the first block', async () => {
         const c = chain();
         expect(await firstBlockAtOrAfter({ head, target: 5, timestampOf: c.timestampOf })).toBe(0n);
+    });
+});
+
+// A scripted set of RPC endpoints. Each knows some transactions and may or
+// may not accept batched requests, like the public ones do.
+type Request = { id: number; method: string; params: [string] };
+function endpoints(spec: Record<string, { knows: string[]; batches?: boolean; down?: boolean }>) {
+    const calls: { url: string; size: number | 'single' }[] = [];
+    const answer = (url: string, request: Request) => ({
+        jsonrpc: '2.0',
+        id: request.id,
+        result: spec[url].knows.includes(request.params[0])
+            ? { hash: request.params[0], input: `0xinput-of-${request.params[0]}` }
+            : null,
+    });
+    return {
+        calls,
+        post: async (url: string, body: unknown) => {
+            const endpoint = spec[url];
+            if (endpoint.down) {
+                calls.push({ url, size: Array.isArray(body) ? body.length : 'single' });
+                throw new Error('HTTP 503');
+            }
+            if (Array.isArray(body)) {
+                calls.push({ url, size: body.length });
+                if (endpoint.batches === false) throw new Error('HTTP 413');
+                return (body as Request[]).map((request) => answer(url, request));
+            }
+            calls.push({ url, size: 'single' });
+            return answer(url, body as Request);
+        },
+    };
+}
+
+const hashes = (n: number) => Array.from({ length: n }, (_, i) => `0xhash${i}` as `0x${string}`);
+
+describe('fetching the input of each burn transaction', () => {
+    test('an endpoint that accepts batches is asked in batches of 25', async () => {
+        const all = hashes(60);
+        const rpc = endpoints({ a: { knows: all } });
+        const inputs = await fetchInputs({ urls: ['a'], hashes: all, post: rpc.post });
+        expect(inputs.size).toBe(60);
+        expect(inputs.get('0xhash7')).toBe('0xinput-of-0xhash7');
+        expect(rpc.calls).toEqual([
+            { url: 'a', size: 25 },
+            { url: 'a', size: 25 },
+            { url: 'a', size: 10 },
+        ]);
+    });
+
+    test('a transaction one endpoint cannot return is asked of the next, and only that one', async () => {
+        // Seen on mainnet: a node served a burn log but answered null for its transaction.
+        const all = hashes(3);
+        const rpc = endpoints({ a: { knows: ['0xhash0', '0xhash2'] }, b: { knows: all } });
+        const inputs = await fetchInputs({ urls: ['a', 'b'], hashes: all, post: rpc.post });
+        expect([...inputs.keys()].sort()).toEqual(all);
+        expect(inputs.get('0xhash1')).toBe('0xinput-of-0xhash1');
+        expect(rpc.calls).toEqual([
+            { url: 'a', size: 3 },
+            { url: 'b', size: 1 },
+        ]);
+    });
+
+    test('an endpoint that refuses batches is asked one transaction at a time', async () => {
+        const all = hashes(4);
+        const rpc = endpoints({ refuser: { knows: all, batches: false } });
+        const inputs = await fetchInputs({ urls: ['refuser'], hashes: all, post: rpc.post });
+        expect(inputs.size).toBe(4);
+        expect(rpc.calls.filter((c) => c.size === 'single')).toHaveLength(4);
+        // Having learned that, it does not try a batch there again.
+        rpc.calls.length = 0;
+        await fetchInputs({ urls: ['refuser'], hashes: all, post: rpc.post });
+        expect(rpc.calls.every((c) => c.size === 'single')).toBe(true);
+    });
+
+    test('an endpoint that is down costs two requests, not one per transaction', async () => {
+        const all = hashes(40);
+        const rpc = endpoints({ dead: { knows: all, down: true }, b: { knows: all } });
+        const inputs = await fetchInputs({ urls: ['dead', 'b'], hashes: all, post: rpc.post });
+        expect(inputs.size).toBe(40);
+        expect(rpc.calls.filter((c) => c.url === 'dead')).toHaveLength(2);
+    });
+
+    test('an endpoint that is down is skipped for the next one', async () => {
+        const all = hashes(2);
+        const rpc = endpoints({ a: { knows: all, down: true }, b: { knows: all } });
+        const inputs = await fetchInputs({ urls: ['a', 'b'], hashes: all, post: rpc.post });
+        expect(inputs.size).toBe(2);
+    });
+
+    test('a transaction no endpoint returns fails the range rather than being skipped', async () => {
+        // Skipping it could silently drop a tagged burn from the count.
+        const rpc = endpoints({ a: { knows: [] }, b: { knows: [] } });
+        await expect(
+            fetchInputs({ urls: ['a', 'b'], hashes: ['0xhash0'], post: rpc.post }),
+        ).rejects.toThrow(/0xhash0/);
+    });
+
+    test('no transactions means no requests', async () => {
+        const rpc = endpoints({ a: { knows: [] } });
+        expect((await fetchInputs({ urls: ['a'], hashes: [], post: rpc.post })).size).toBe(0);
+        expect(rpc.calls).toEqual([]);
     });
 });

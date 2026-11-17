@@ -61,9 +61,10 @@ export function parseStats(raw: unknown): Stats | null {
             isText(r.dest) &&
             isAmount(r.amount) &&
             isText(r.tx) &&
-            // Rendered as a link, so only an https address is acceptable.
+            // Rendered as a link, so only an https address is acceptable;
+            // empty means there is no link to show.
             isText(r.url) &&
-            r.url.startsWith('https://'),
+            (r.url === '' || r.url.startsWith('https://')),
     );
     const coverageOk = allOf(
         raw.coverage,
