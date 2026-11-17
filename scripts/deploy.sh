@@ -49,6 +49,19 @@ if [ -z "${DEPLOY_UNCOMMITTED:-}" ] && ! git diff --quiet HEAD --; then
     exit 1
 fi
 
+# The build has to be able to read the network it is about to serve: a Stellar
+# protocol upgrade can leave the bundled SDK behind. DEPLOY_SKIP_CHECK=1 skips
+# this, for the day the check itself is what is broken.
+if [ -z "${DEPLOY_SKIP_CHECK:-}" ]; then
+    networks=''
+    for target in "${targets[@]}"; do
+        if [ "$target" = mainnet ]; then networks="$networks mainnet"; else networks="$networks testnet"; fi
+    done
+    for network in $(printf '%s\n' $networks | sort -u); do
+        pnpm exec tsx scripts/check-stellar.ts "--$network"
+    done
+fi
+
 pnpm run build
 
 # Nothing the build writes has a space in its name. A file that does is a
