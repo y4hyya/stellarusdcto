@@ -111,6 +111,20 @@ describe('translateError', () => {
         }
     });
 
+    test('a reply in a format newer than this app gets its own message', () => {
+        // What the Stellar library throws when the network has moved to a
+        // protocol it does not know yet (protocol 30, November 2026).
+        const raw = new Error('XDR Read Error: unknown StellarValueType member for value 3');
+        const translated = translateError(raw, { family: 'stellar', phase: 'approving' });
+        expect(translated.code).toBe('NETWORK_AHEAD_OF_APP');
+        expect(translated.retryable).toBe(false);
+        expect(translated.raw).toBe(raw);
+        // The same failure reads the same whichever step it surfaces in.
+        expect(translateError(new Error('XDR Read Error: attempt to read outside'), {}).code).toBe(
+            'NETWORK_AHEAD_OF_APP',
+        );
+    });
+
     test('keeps the raw text behind UNKNOWN for anything else', () => {
         const raw = new Error('some inscrutable failure');
         const translated = translateError(raw, {});

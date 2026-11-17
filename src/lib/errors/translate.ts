@@ -72,6 +72,13 @@ export function translateError(raw: unknown, ctx: TranslateContext): TransferErr
         return new TransferError('GAS_LIMIT_REFUSED', { raw });
     }
 
+    // The Stellar library could not decode a reply: the network has moved to
+    // a protocol newer than the library this build ships. Every such decode
+    // happens before a transaction is accepted, so nothing was sent.
+    if (msg.includes('XDR Read Error')) {
+        return new TransferError('NETWORK_AHEAD_OF_APP', { raw });
+    }
+
     if (ctx.family === 'stellar') {
         if (msg.includes('Error(Contract, #9)')) {
             return new TransferError('ALLOWANCE_EXPIRED', { raw });

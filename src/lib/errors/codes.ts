@@ -25,6 +25,8 @@ export type TransferErrorCode =
     | 'AMOUNT_TOO_MANY_DECIMALS'
     | 'RECIPIENT_INVALID'
     | 'STELLAR_TX_EXPIRED'
+    | 'STELLAR_TX_UNCONFIRMED'
+    | 'NETWORK_AHEAD_OF_APP'
     | 'ROUTE_INVALID'
     | 'BURN_REVERTED'
     | 'TX_NOT_A_BURN'
@@ -159,6 +161,18 @@ export const MESSAGES: Record<TransferErrorCode, CatalogEntry> = {
             'The Stellar network was busy and this transaction expired before it was included. Nothing left the wallet.',
         action: 'Try again. The expired transaction can never execute later, so retrying cannot double send.',
         retryable: true,
+    },
+    STELLAR_TX_UNCONFIRMED: {
+        userMessage:
+            'The transaction was sent to Stellar, but the app could not find out whether it went through.',
+        action: 'Do not send it again yet. Look it up in a Stellar explorer with the hash in the details below. If it was a burn and it went through, finish it from Rescue.',
+        retryable: false,
+    },
+    NETWORK_AHEAD_OF_APP: {
+        userMessage:
+            'The Stellar network has been upgraded and this version of the app cannot read its reply yet. Nothing was sent in this step.',
+        action: 'This needs an update to the app, not another try. A transfer that was already burned can be finished from Rescue once the app is updated.',
+        retryable: false,
     },
     BURN_REVERTED: {
         userMessage:
