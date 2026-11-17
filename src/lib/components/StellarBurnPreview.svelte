@@ -22,6 +22,7 @@
     import { shortAddr } from '$lib/utils';
 
     import ContractArg from '$lib/components/ui/ContractArg.svelte';
+    import TagNote from '$lib/components/ui/TagNote.svelte';
 
     // The outbound burn preview, reused for either destination. Pass EVM
     // fields for a Stellar→EVM burn, or `solanaRecipient` (a Solana owner
@@ -262,6 +263,8 @@
                 {/snippet}
             </ContractArg>
         {/if}
+
+        <TagNote family="stellar" />
     </ul>
 </section>
 

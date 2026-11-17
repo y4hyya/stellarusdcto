@@ -13,6 +13,7 @@
     import type { SendCallsCapability } from '$lib/evm/capabilities';
     import { shortAddr } from '$lib/utils';
     import ContractArg from '$lib/components/ui/ContractArg.svelte';
+    import TagNote from '$lib/components/ui/TagNote.svelte';
 
     let {
         evmAddress,
@@ -283,6 +284,8 @@
         />
 
         <ContractArg name="hookData" type="bytes" hex {...hookDataArg} />
+
+        <TagNote family="evm" />
     </ul>
 </section>
 

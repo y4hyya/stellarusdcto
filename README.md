@@ -141,6 +141,47 @@ any burn transaction hash, even from other tools: the source chain is
 detected from the hash shape, the route comes back from Iris, and minting is
 permissionless.
 
+## How usage is counted
+
+There is no server and no analytics script, so the only way to know how much
+this is used is to read it back off the chains. On a site where tagging is
+switched on, every transaction the app sends carries a small public tag,
+`stablehops`:
+
+| Chain family | Tag                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------- |
+| EVM          | 28 bytes after the call data of the burn and the mint, which Circle's contracts ignore |
+| Solana       | a memo instruction next to the burn                                                    |
+| Stellar      | the transaction's "valid after" time bound, set to a fixed moment in the past          |
+
+The tag never touches an amount, a recipient or hook data, and it is dropped
+whenever it cannot be shown to be harmless before signing. On EVM the call is
+simulated with and without it and the two outcomes must match. On Solana the
+transaction must still fit the size limit. On Stellar the tagged transaction
+must simulate cleanly. The signing previews list it.
+
+`scripts/stats/collect.ts` reads public RPCs for every mainnet chain, keeps
+the transactions that carry the tag and writes the totals. It needs no keys:
+
+```bash
+pnpm run stats --data stats-data
+```
+
+A scheduled workflow runs it once a day and commits the output to the `stats`
+branch, which is what the `/stats` page reads.
+
+Worth knowing:
+
+- Counting starts on 2026-11-16. Earlier transfers carry no tag and cannot be
+  counted afterwards.
+- Unique wallets are distinct signing addresses, so one person with wallets on
+  two chain families counts twice.
+- Mints on Solana cannot carry the tag (the transaction is already at the size
+  limit), and rescues are counted for transfers into Stellar only.
+- Anyone can copy the tag, so the numbers are transactions that carry it, not
+  proof of where they were signed.
+- Tagging is on only for the hostnames listed in `src/lib/attribution/tag.ts`.
+
 ## Limitations
 
 Still on the way to a full product:

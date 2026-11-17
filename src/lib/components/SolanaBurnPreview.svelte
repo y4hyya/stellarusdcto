@@ -5,6 +5,7 @@
     import { strkeyToBytes32, encodeStellarForwarderHookData } from '$lib/stellar/recipient';
     import { shortAddr } from '$lib/utils';
     import ContractArg from '$lib/components/ui/ContractArg.svelte';
+    import TagNote from '$lib/components/ui/TagNote.svelte';
 
     let {
         solanaAddress,
@@ -148,6 +149,8 @@
         />
 
         <ContractArg name="hookData" type="bytes" hex {...hookDataArg} />
+
+        <TagNote family="solana" />
     </ul>
 </section>
 

@@ -9,17 +9,21 @@
     import HistoryPanel from '$lib/components/HistoryPanel.svelte';
     import { envPinnedByHost, getEnv, setEnv, SITE_URLS, type NetworkEnv } from '$lib/registry';
     import { detectAllWallets } from '$lib/ui/wallets.svelte';
+    import { tagEnabled } from '$lib/attribution/tag';
 
     let { children } = $props();
 
     let history = $state<{ open: () => void } | undefined>();
     let env = $state<NetworkEnv>('testnet');
     let pinned = $state(true);
+    // Whether this site sends tagged transactions; the footer says so when it does.
+    let tagged = $state(false);
 
     onMount(() => {
         detectAllWallets();
         env = getEnv();
         pinned = envPinnedByHost();
+        tagged = tagEnabled();
     });
 
     let other = $derived<NetworkEnv>(env === 'testnet' ? 'mainnet' : 'testnet');
@@ -47,6 +51,13 @@
             >
                 Rescue
             </a>
+            <a
+                class="nav-link"
+                class:current={page.url.pathname.startsWith('/stats')}
+                href={resolve('/stats')}
+            >
+                Stats
+            </a>
             <button class="nav-link as-button" onclick={() => history?.open()}>History</button>
         </nav>
         <div class="top-right glass">
@@ -73,6 +84,12 @@
             >No fees · no accounts · no tracking. You pay network gas and Circle's protocol fee
             only.</span
         >
+        {#if tagged}
+            <span>
+                Transfers carry a public tag so usage can be counted. Nothing is collected.
+                <a href={resolve('/stats')}>See the numbers</a>
+            </span>
+        {/if}
         <span class="foot-links">
             <a href="https://developers.circle.com/cctp" target="_blank" rel="noreferrer">
                 Circle docs

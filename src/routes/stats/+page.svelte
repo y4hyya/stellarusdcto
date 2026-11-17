@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from 'svelte';
     import DailyChart from '$lib/components/stats/DailyChart.svelte';
-    import { TAG } from '$lib/attribution/tag';
+    import { TAG, tagEnabled } from '$lib/attribution/tag';
     import { MAINNET } from '$lib/registry';
     import { usdc } from '$lib/stats/chart';
     import { chainLabel, formatUsdc6, parseStats } from '$lib/stats/format';
@@ -32,6 +32,10 @@
         }
     }
     onMount(load);
+
+    // Tagging is switched on per site. Where it is off, say so: transfers made
+    // on this site are then not part of these numbers.
+    const tagOn = tagEnabled();
 
     const CHART_DAYS = 90;
     const ROUTES_SHOWN = 10;
@@ -89,11 +93,20 @@
     <header class="hero">
         <h1 class="headline">Usage, counted in public.</h1>
         <p class="sub">
-            Every transfer made here carries a small public tag. These numbers are the mainnet
-            transactions that carry it, read back from the chains once a day. Nothing is collected
-            from you.
+            Transfers made here carry a small public tag. These numbers are the mainnet transactions
+            that carry it, read back from the chains once a day. Nothing is collected from you.
         </p>
     </header>
+
+    {#if !tagOn}
+        <section class="card glass notice">
+            <h2 class="card-title">Tagging is not switched on for this site yet.</h2>
+            <p>
+                Transfers made on this site today carry no tag, so they are not counted. The numbers
+                below are for the transfers that do carry it.
+            </p>
+        </section>
+    {/if}
 
     {#if view.status === 'loading'}
         <section class="card glass quiet" aria-live="polite">Loading the latest numbers…</section>
