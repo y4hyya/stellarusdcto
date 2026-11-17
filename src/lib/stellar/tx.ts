@@ -3,7 +3,7 @@ import { STELLAR } from '$lib/config';
 import { TransferError } from '$lib/errors/codes';
 import { sleep } from '$lib/utils';
 import { STELLAR_TAG_MIN_TIME, tagEnabled } from '../attribution/tag';
-import { stellarRpc } from './client';
+import { stellarRpc, transactionStatus, type StellarTxStatus } from './client';
 import { signXdr } from './freighter';
 
 type BuiltTx = ReturnType<TransactionBuilder['build']>;
@@ -123,6 +123,37 @@ export function pollDeadline(maxTime: string | undefined, now: number): number {
     return Math.max(bound * 1000, now) + 15_000;
 }
 
+/**
+ * Wait for a submitted transaction to be included. Only the status word is
+ * read, as plain JSON, so nothing about how Stellar encodes results can make
+ * a transaction that landed look like one that did not. A status read that
+ * fails says nothing about the transaction, so the wait goes on. If the node
+ * gives no answer by the deadline the outcome is UNKNOWN, which is not
+ * EXPIRED: an expired transaction can never land, an unknown one may have.
+ */
+export async function waitForTransaction(args: {
+    hash: string;
+    deadline: number;
+    status: (hash: string) => Promise<StellarTxStatus>;
+    now?: () => number;
+    pause?: (ms: number) => Promise<void>;
+}): Promise<'SUCCESS' | 'FAILED' | 'EXPIRED' | 'UNKNOWN'> {
+    const now = args.now ?? Date.now;
+    const pause = args.pause ?? sleep;
+    let unanswered = true;
+    while (now() < args.deadline) {
+        try {
+            const status = await args.status(args.hash);
+            unanswered = false;
+            if (status !== 'NOT_FOUND') return status;
+        } catch {
+            unanswered = true;
+        }
+        await pause(1000);
+    }
+    return unanswered ? 'UNKNOWN' : 'EXPIRED';
+}
+
 async function signAndSubmit(tx: BuiltTx): Promise<string> {
     const signedXdr = await signXdr(tx.toXDR());
     const signed = TransactionBuilder.fromXDR(signedXdr, STELLAR.networkPassphrase);
@@ -136,13 +167,17 @@ async function signAndSubmit(tx: BuiltTx): Promise<string> {
         'timeBounds' in signed ? signed.timeBounds?.maxTime : undefined,
         Date.now(),
     );
-    while (Date.now() < deadline) {
-        const got = await stellarRpc.getTransaction(send.hash);
-        if (got.status === 'SUCCESS') return send.hash;
-        if (got.status === 'FAILED') {
-            throw new Error(`Transaction failed on-chain: ${send.hash}`);
-        }
-        await sleep(1000);
+    const outcome = await waitForTransaction({
+        hash: send.hash,
+        deadline,
+        status: transactionStatus,
+    });
+    if (outcome === 'SUCCESS') return send.hash;
+    if (outcome === 'FAILED') throw new Error(`Transaction failed on-chain: ${send.hash}`);
+    if (outcome === 'UNKNOWN') {
+        throw new TransferError('STELLAR_TX_UNCONFIRMED', {
+            raw: `submitted, outcome not read: ${send.hash}`,
+        });
     }
     throw new TransferError('STELLAR_TX_EXPIRED', { raw: `expired unsubmitted: ${send.hash}` });
 }

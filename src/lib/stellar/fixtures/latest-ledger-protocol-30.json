@@ -1,0 +1,10 @@
+{
+    "note": "A real getLatestLedger reply from Stellar testnet on protocol 30 (2026-11-17). metadataXdr is left out for size; it was 644364 characters.",
+    "result": {
+        "id": "fbfb59e58fa5414c3784f238c62475d23b6aa3c94dbd9a5725ee62c9dd9b23bd",
+        "protocolVersion": 30,
+        "sequence": 5786032,
+        "closeTime": "1794953806",
+        "headerXdr": "AAAAHt8Vd1dOYTYhSxYrtKbyS0mJisXB/heEAfbOBy74k+hJfwVEopX0xW+9ojuneiuH2EJvo7hUtAqKvYNGchF3xGcAAAAAavzSTgAAAAAAAAADAAABoeuVgvcAAAAAtV0Qsrt9KE7VwDpHpeG1kMkPV4NVRxzEUHu+ggTSPIsAAABAqdH36WlBPTY5jbjyME8x9mlhPSvNcVh9HWMRzDN/f/ecpeEgXACz1Xwi3WrsUqQuXAJnjKc83iZ9NkjDikKRAQAwI/meFBmZih8hr7uyutdAwbm2MdliiaUSMgzrJiaoY6blwEyV6E85X1Da+Rlgy0DxAwxOPGFO8Gbv0v/ykj8AWEmwDeC2s6dkAAAAAC0+d7yu4QAAAAAAAAAAAA723QAAAGQATEtAAAAAyJgqeUqkx/0K2GeHPi6QdtfFgdCBsUZabcdo00v1IPbHq88PkLjfiC3JpPMgx2kMMjwc6YXgVVxotYlLnInY9DohUR8+RPG78t5V2Z/KN5UZ1yhjYCbU/IPTmD1wlg2Q/0TAaAz0AcKXg+0YuEt37ZCofX9OhI4/zMdPViWaDD1oAAAAAA=="
+    }
+}

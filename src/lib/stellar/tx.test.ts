@@ -6,6 +6,7 @@ import {
     contractCallBuilder,
     pickTaggedOrPlain,
     stellarTimebounds,
+    waitForTransaction,
 } from './tx';
 
 const CALLER = 'GBRFS5SMB55JJHJIHZQEZYBHDPBEM3WGMDUR7WQ6YBVYTOYJXXHAGIJ7';
@@ -100,6 +101,66 @@ describe('the tagged transaction is used only when it simulates cleanly', () => 
         expect(picked.tagged).toBe(false);
         expect(h.built).toEqual([0]);
         expect(h.simulated).toEqual([0]);
+    });
+});
+
+describe('waiting for a submitted transaction', () => {
+    // A clock that only moves when the code under test pauses.
+    function scripted(answers: ('SUCCESS' | 'FAILED' | 'NOT_FOUND' | Error)[]) {
+        let time = 0;
+        let asked = 0;
+        return {
+            asked: () => asked,
+            args: {
+                hash: 'abc',
+                deadline: 5_000,
+                now: () => time,
+                pause: async (ms: number) => {
+                    time += ms;
+                },
+                status: async () => {
+                    const answer = answers[Math.min(asked, answers.length - 1)];
+                    asked += 1;
+                    if (answer instanceof Error) throw answer;
+                    return answer;
+                },
+            },
+        };
+    }
+
+    test('returns as soon as the node reports success', async () => {
+        const s = scripted(['NOT_FOUND', 'NOT_FOUND', 'SUCCESS']);
+        expect(await waitForTransaction(s.args)).toBe('SUCCESS');
+        expect(s.asked()).toBe(3);
+    });
+
+    test('a failure on chain is reported as a failure', async () => {
+        expect(await waitForTransaction(scripted(['NOT_FOUND', 'FAILED']).args)).toBe('FAILED');
+    });
+
+    test('still not found once the deadline has passed: expired, safe to retry', async () => {
+        const s = scripted(['NOT_FOUND']);
+        expect(await waitForTransaction(s.args)).toBe('EXPIRED');
+        expect(s.asked()).toBe(5);
+    });
+
+    test('a status read that fails is not an answer: it keeps asking', async () => {
+        // The node dropping a request says nothing about the transaction.
+        const s = scripted([new Error('fetch failed'), new Error('fetch failed'), 'SUCCESS']);
+        expect(await waitForTransaction(s.args)).toBe('SUCCESS');
+    });
+
+    test('never getting an answer is unknown, not expired', async () => {
+        // Calling this "expired" would tell the user it is safe to send
+        // again, when the first one may well have landed.
+        expect(await waitForTransaction(scripted([new Error('fetch failed')]).args)).toBe(
+            'UNKNOWN',
+        );
+    });
+
+    test('an answer followed by nothing but failed reads is unknown too', async () => {
+        const s = scripted(['NOT_FOUND', new Error('fetch failed')]);
+        expect(await waitForTransaction(s.args)).toBe('UNKNOWN');
     });
 });
 

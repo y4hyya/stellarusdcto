@@ -10,7 +10,7 @@ import {
     scValToNative,
 } from '@stellar/stellar-sdk';
 import { STELLAR } from '$lib/config';
-import { stellarRpc } from './client';
+import { latestLedgerSequence, stellarRpc } from './client';
 import { signAndSubmitClassic, simulateSignAndSubmit, stellarTimebounds } from './tx';
 import { inclusionFee } from './fees';
 import { STELLAR_TAG_MIN_TIME, tagEnabled } from '../attribution/tag';
@@ -72,8 +72,7 @@ export async function approveUsdc(args: {
     amount: bigint;
 }): Promise<string> {
     const account = await stellarRpc.getAccount(args.from);
-    const latest = await stellarRpc.getLatestLedger();
-    const expiration = latest.sequence + 1000;
+    const expiration = (await latestLedgerSequence()) + 1000;
 
     const tx = new TransactionBuilder(account, {
         fee: await inclusionFee(),
