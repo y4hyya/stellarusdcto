@@ -1,0 +1,157 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-11-18T14:06:07.502Z",
+  "since": "2026-11-16",
+  "tag": "stablehops",
+  "totals": {
+    "transfers": 0,
+    "volume": "0",
+    "wallets": 0,
+    "walletsByFamily": {
+      "evm": 0,
+      "solana": 0,
+      "stellar": 0
+    },
+    "rescues": 0,
+    "rescuedVolume": "0"
+  },
+  "daily": [],
+  "routes": [],
+  "recent": [],
+  "coverage": [
+    {
+      "chain": "base",
+      "status": "ok",
+      "through": "2026-11-18T13:41:07.000Z"
+    },
+    {
+      "chain": "ethereum",
+      "status": "ok",
+      "through": "2026-11-18T13:40:59.000Z"
+    },
+    {
+      "chain": "solana",
+      "status": "error",
+      "through": null,
+      "note": "HTTP 429 from api.mainnet-beta.solana.com"
+    },
+    {
+      "chain": "arbitrum",
+      "status": "error",
+      "through": null,
+      "note": "HTTP 429 from arb1.arbitrum.io"
+    },
+    {
+      "chain": "avalanche",
+      "status": "ok",
+      "through": "2026-11-18T13:41:07.000Z"
+    },
+    {
+      "chain": "op",
+      "status": "ok",
+      "through": "2026-11-18T13:41:05.000Z"
+    },
+    {
+      "chain": "polygon",
+      "status": "ok",
+      "through": "2026-11-18T13:41:07.000Z"
+    },
+    {
+      "chain": "unichain",
+      "status": "error",
+      "through": "2026-11-18T06:26:39.000Z",
+      "note": "Your IP has exceeded its request rate limit."
+    },
+    {
+      "chain": "linea",
+      "status": "ok",
+      "through": "2026-11-18T13:39:02.000Z"
+    },
+    {
+      "chain": "worldchain",
+      "status": "ok",
+      "through": "2026-11-18T13:41:05.000Z"
+    },
+    {
+      "chain": "ink",
+      "status": "ok",
+      "through": "2026-11-18T13:41:06.000Z"
+    },
+    {
+      "chain": "sonic",
+      "status": "ok",
+      "through": "2026-11-18T13:43:24.000Z"
+    },
+    {
+      "chain": "monad",
+      "status": "ok",
+      "through": "2026-11-18T13:41:08.000Z"
+    },
+    {
+      "chain": "sei",
+      "status": "ok",
+      "through": "2026-11-18T13:41:06.000Z"
+    },
+    {
+      "chain": "hyperevm",
+      "status": "ok",
+      "through": "2026-11-18T13:41:05.000Z"
+    },
+    {
+      "chain": "injective",
+      "status": "ok",
+      "through": "2026-11-18T13:41:06.000Z"
+    },
+    {
+      "chain": "cronos",
+      "status": "ok",
+      "through": "2026-11-18T13:40:55.000Z"
+    },
+    {
+      "chain": "plasma",
+      "status": "ok",
+      "through": "2026-11-18T13:41:07.000Z"
+    },
+    {
+      "chain": "plume",
+      "status": "ok",
+      "through": "2026-11-18T13:41:08.000Z"
+    },
+    {
+      "chain": "codex",
+      "status": "behind",
+      "through": "2026-11-16T22:09:01.000Z"
+    },
+    {
+      "chain": "morph",
+      "status": "ok",
+      "through": "2026-11-18T13:40:36.000Z"
+    },
+    {
+      "chain": "edge",
+      "status": "ok",
+      "through": "2026-11-18T13:18:30.000Z"
+    },
+    {
+      "chain": "pharos",
+      "status": "ok",
+      "through": "2026-11-18T13:41:39.000Z"
+    },
+    {
+      "chain": "xdc",
+      "status": "ok",
+      "through": "2026-11-18T13:40:49.000Z"
+    },
+    {
+      "chain": "xlayer",
+      "status": "ok",
+      "through": "2026-11-18T13:41:07.000Z"
+    },
+    {
+      "chain": "stellar",
+      "status": "ok",
+      "through": "2026-11-18T13:57:46.144Z"
+    }
+  ],
+  "gaps": []
+}
