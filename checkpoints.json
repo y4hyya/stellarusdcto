@@ -1,39 +1,39 @@
 {
   "evm": {
-    "linea": "32640683",
-    "plume": "106592049",
-    "edge": "864172",
-    "morph": "30025271",
-    "plasma": "38064247",
-    "hyperevm": "51598181",
-    "sonic": "82753078",
-    "unichain": "64234840",
-    "xdc": "109516414",
-    "sei": "244018883",
-    "op": "159705244",
-    "ink": "61510855",
-    "injective": "192273995",
-    "avalanche": "100667646",
-    "polygon": "97535865",
-    "cronos": "106599602",
-    "worldchain": "37836813",
-    "ethereum": "26442307",
-    "monad": "123313983",
-    "base": "59094457",
-    "pharos": "23389063",
-    "arbitrum": "525201794",
-    "xlayer": "76240231",
-    "codex": "32984437"
+    "linea": "32651278",
+    "plume": "106809477",
+    "edge": "865540",
+    "morph": "30078096",
+    "plasma": "38152349",
+    "hyperevm": "51687770",
+    "sonic": "82805578",
+    "unichain": "64349027",
+    "xdc": "109534826",
+    "sei": "244206230",
+    "op": "159749305",
+    "ink": "61598975",
+    "injective": "192420701",
+    "avalanche": "100776089",
+    "polygon": "97594612",
+    "cronos": "106801884",
+    "worldchain": "37880874",
+    "ethereum": "26449632",
+    "monad": "123602448",
+    "base": "59535059",
+    "pharos": "23480904",
+    "arbitrum": "525389703",
+    "xlayer": "76328352",
+    "codex": "33099660"
   },
   "solana": {
     "signature": null
   },
-  "stellar": 65544841,
+  "stellar": 65562453,
   "coverage": {
     "linea": {
       "chain": "linea",
       "status": "ok",
-      "through": "2026-11-18T13:39:02.000Z"
+      "through": "2026-11-19T14:06:59.000Z"
     },
     "solana": {
       "chain": "solana",
@@ -44,124 +44,123 @@
     "plume": {
       "chain": "plume",
       "status": "ok",
-      "through": "2026-11-18T13:41:08.000Z"
+      "through": "2026-11-19T14:09:49.000Z"
     },
     "edge": {
       "chain": "edge",
       "status": "ok",
-      "through": "2026-11-18T13:18:30.000Z"
+      "through": "2026-11-19T13:02:56.000Z"
     },
     "morph": {
       "chain": "morph",
       "status": "ok",
-      "through": "2026-11-18T13:40:36.000Z"
+      "through": "2026-11-19T14:09:50.000Z"
     },
     "plasma": {
       "chain": "plasma",
       "status": "ok",
-      "through": "2026-11-18T13:41:07.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "hyperevm": {
       "chain": "hyperevm",
       "status": "ok",
-      "through": "2026-11-18T13:41:05.000Z"
+      "through": "2026-11-19T14:09:46.000Z"
     },
     "sonic": {
       "chain": "sonic",
       "status": "ok",
-      "through": "2026-11-18T13:43:24.000Z"
+      "through": "2026-11-19T14:09:28.000Z"
     },
     "unichain": {
       "chain": "unichain",
-      "status": "error",
-      "through": "2026-11-18T06:26:39.000Z",
-      "note": "Your IP has exceeded its request rate limit."
+      "status": "ok",
+      "through": "2026-11-19T14:09:46.000Z"
     },
     "xdc": {
       "chain": "xdc",
       "status": "ok",
-      "through": "2026-11-18T13:40:49.000Z"
+      "through": "2026-11-19T14:05:53.000Z"
     },
     "sei": {
       "chain": "sei",
       "status": "ok",
-      "through": "2026-11-18T13:41:06.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "op": {
       "chain": "op",
       "status": "ok",
-      "through": "2026-11-18T13:41:05.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "ink": {
       "chain": "ink",
       "status": "ok",
-      "through": "2026-11-18T13:41:06.000Z"
+      "through": "2026-11-19T14:09:46.000Z"
     },
     "injective": {
       "chain": "injective",
       "status": "ok",
-      "through": "2026-11-18T13:41:06.000Z"
+      "through": "2026-11-19T14:09:45.000Z"
     },
     "avalanche": {
       "chain": "avalanche",
       "status": "ok",
-      "through": "2026-11-18T13:41:07.000Z"
+      "through": "2026-11-19T14:09:21.000Z"
     },
     "polygon": {
       "chain": "polygon",
       "status": "ok",
-      "through": "2026-11-18T13:41:07.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "cronos": {
       "chain": "cronos",
       "status": "ok",
-      "through": "2026-11-18T13:40:55.000Z"
+      "through": "2026-11-19T14:09:50.000Z"
     },
     "worldchain": {
       "chain": "worldchain",
       "status": "ok",
-      "through": "2026-11-18T13:41:05.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "stellar": {
       "chain": "stellar",
       "status": "ok",
-      "through": "2026-11-18T13:57:46.144Z"
+      "through": "2026-11-19T14:25:22.555Z"
     },
     "ethereum": {
       "chain": "ethereum",
       "status": "ok",
-      "through": "2026-11-18T13:40:59.000Z"
+      "through": "2026-11-19T14:09:35.000Z"
     },
     "monad": {
       "chain": "monad",
       "status": "ok",
-      "through": "2026-11-18T13:41:08.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "base": {
       "chain": "base",
       "status": "ok",
-      "through": "2026-11-18T13:41:07.000Z"
+      "through": "2026-11-19T14:09:47.000Z"
     },
     "pharos": {
       "chain": "pharos",
       "status": "ok",
-      "through": "2026-11-18T13:41:39.000Z"
+      "through": "2026-11-19T14:09:22.000Z"
     },
     "arbitrum": {
       "chain": "arbitrum",
       "status": "error",
-      "through": null,
+      "through": "2026-11-18T17:45:47.000Z",
       "note": "HTTP 429 from arb1.arbitrum.io"
     },
     "xlayer": {
       "chain": "xlayer",
       "status": "ok",
-      "through": "2026-11-18T13:41:07.000Z"
+      "through": "2026-11-19T14:09:48.000Z"
     },
     "codex": {
       "chain": "codex",
-      "status": "behind",
-      "through": "2026-11-16T22:09:01.000Z"
+      "status": "ok",
+      "through": "2026-11-19T14:09:47.000Z"
     }
   },
   "gaps": []

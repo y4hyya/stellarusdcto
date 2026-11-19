@@ -1,7 +1,7 @@
 # Usage stats
 
 Transfers that carry the public `stablehops` tag, counted from public chain data.
-Generated 2026-11-18T14:06:07.502Z. Counting starts 2026-11-16; nothing earlier carries the tag.
+Generated 2026-11-19T14:28:30.908Z. Counting starts 2026-11-16; nothing earlier carries the tag.
 
 |  |  |
 | --- | --- |
@@ -26,32 +26,32 @@ caught up by a later run; its transfers are missing from the totals until then.
 
 | Chain | Status | Scanned through | Note |
 | --- | --- | --- | --- |
-| Base | ok | 2026-11-18T13:41:07.000Z |  |
-| Ethereum | ok | 2026-11-18T13:40:59.000Z |  |
+| Base | ok | 2026-11-19T14:09:47.000Z |  |
+| Ethereum | ok | 2026-11-19T14:09:35.000Z |  |
 | Solana | error | never | HTTP 429 from api.mainnet-beta.solana.com |
-| Arbitrum | error | never | HTTP 429 from arb1.arbitrum.io |
-| Avalanche | ok | 2026-11-18T13:41:07.000Z |  |
-| OP Mainnet | ok | 2026-11-18T13:41:05.000Z |  |
-| Polygon PoS | ok | 2026-11-18T13:41:07.000Z |  |
-| Unichain | error | 2026-11-18T06:26:39.000Z | Your IP has exceeded its request rate limit. |
-| Linea | ok | 2026-11-18T13:39:02.000Z |  |
-| World Chain | ok | 2026-11-18T13:41:05.000Z |  |
-| Ink | ok | 2026-11-18T13:41:06.000Z |  |
-| Sonic | ok | 2026-11-18T13:43:24.000Z |  |
-| Monad | ok | 2026-11-18T13:41:08.000Z |  |
-| Sei | ok | 2026-11-18T13:41:06.000Z |  |
-| HyperEVM | ok | 2026-11-18T13:41:05.000Z |  |
-| Injective | ok | 2026-11-18T13:41:06.000Z |  |
-| Cronos | ok | 2026-11-18T13:40:55.000Z |  |
-| Plasma | ok | 2026-11-18T13:41:07.000Z |  |
-| Plume | ok | 2026-11-18T13:41:08.000Z |  |
-| Codex | behind | 2026-11-16T22:09:01.000Z |  |
-| Morph | ok | 2026-11-18T13:40:36.000Z |  |
-| EDGE | ok | 2026-11-18T13:18:30.000Z |  |
-| Pharos | ok | 2026-11-18T13:41:39.000Z |  |
-| XDC | ok | 2026-11-18T13:40:49.000Z |  |
-| X Layer | ok | 2026-11-18T13:41:07.000Z |  |
-| Stellar | ok | 2026-11-18T13:57:46.144Z |  |
+| Arbitrum | error | 2026-11-18T17:45:47.000Z | HTTP 429 from arb1.arbitrum.io |
+| Avalanche | ok | 2026-11-19T14:09:21.000Z |  |
+| OP Mainnet | ok | 2026-11-19T14:09:47.000Z |  |
+| Polygon PoS | ok | 2026-11-19T14:09:47.000Z |  |
+| Unichain | ok | 2026-11-19T14:09:46.000Z |  |
+| Linea | ok | 2026-11-19T14:06:59.000Z |  |
+| World Chain | ok | 2026-11-19T14:09:47.000Z |  |
+| Ink | ok | 2026-11-19T14:09:46.000Z |  |
+| Sonic | ok | 2026-11-19T14:09:28.000Z |  |
+| Monad | ok | 2026-11-19T14:09:47.000Z |  |
+| Sei | ok | 2026-11-19T14:09:47.000Z |  |
+| HyperEVM | ok | 2026-11-19T14:09:46.000Z |  |
+| Injective | ok | 2026-11-19T14:09:45.000Z |  |
+| Cronos | ok | 2026-11-19T14:09:50.000Z |  |
+| Plasma | ok | 2026-11-19T14:09:47.000Z |  |
+| Plume | ok | 2026-11-19T14:09:49.000Z |  |
+| Codex | ok | 2026-11-19T14:09:47.000Z |  |
+| Morph | ok | 2026-11-19T14:09:50.000Z |  |
+| EDGE | ok | 2026-11-19T13:02:56.000Z |  |
+| Pharos | ok | 2026-11-19T14:09:22.000Z |  |
+| XDC | ok | 2026-11-19T14:05:53.000Z |  |
+| X Layer | ok | 2026-11-19T14:09:48.000Z |  |
+| Stellar | ok | 2026-11-19T14:25:22.555Z |  |
 
 ## Gaps
 
