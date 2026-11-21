@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-20T14:09:21.161Z",
+  "generatedAt": "2026-11-21T13:37:11.500Z",
   "since": "2026-11-16",
   "tag": "stablehops",
   "totals": {
@@ -22,12 +22,12 @@
     {
       "chain": "base",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "ethereum",
       "status": "ok",
-      "through": "2026-11-20T13:44:11.000Z"
+      "through": "2026-11-21T13:11:47.000Z"
     },
     {
       "chain": "solana",
@@ -38,117 +38,117 @@
     {
       "chain": "arbitrum",
       "status": "behind",
-      "through": "2026-11-19T20:23:27.000Z"
+      "through": "2026-11-20T16:52:39.000Z"
     },
     {
       "chain": "avalanche",
       "status": "ok",
-      "through": "2026-11-20T13:44:11.000Z"
+      "through": "2026-11-21T13:11:49.000Z"
     },
     {
       "chain": "op",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "polygon",
       "status": "ok",
-      "through": "2026-11-20T13:44:22.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "unichain",
       "status": "ok",
-      "through": "2026-11-20T13:44:20.000Z"
+      "through": "2026-11-21T13:12:10.000Z"
     },
     {
       "chain": "linea",
       "status": "ok",
-      "through": "2026-11-20T13:49:03.000Z"
+      "through": "2026-11-21T13:12:39.000Z"
     },
     {
       "chain": "worldchain",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "ink",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:10.000Z"
     },
     {
       "chain": "sonic",
       "status": "ok",
-      "through": "2026-11-20T13:39:56.000Z"
+      "through": "2026-11-21T13:09:48.000Z"
     },
     {
       "chain": "monad",
       "status": "ok",
-      "through": "2026-11-20T13:44:19.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "sei",
       "status": "ok",
-      "through": "2026-11-20T13:44:18.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "hyperevm",
       "status": "ok",
-      "through": "2026-11-20T13:44:20.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "injective",
       "status": "ok",
-      "through": "2026-11-20T13:44:19.000Z"
+      "through": "2026-11-21T13:12:12.000Z"
     },
     {
       "chain": "cronos",
       "status": "ok",
-      "through": "2026-11-20T13:44:20.000Z"
+      "through": "2026-11-21T13:12:12.000Z"
     },
     {
       "chain": "plasma",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "plume",
       "status": "ok",
-      "through": "2026-11-20T13:44:23.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "codex",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:11.000Z"
     },
     {
       "chain": "morph",
       "status": "ok",
-      "through": "2026-11-20T13:44:42.000Z"
+      "through": "2026-11-21T13:11:59.000Z"
     },
     {
       "chain": "edge",
       "status": "ok",
-      "through": "2026-11-20T12:28:48.000Z"
+      "through": "2026-11-21T12:01:39.000Z"
     },
     {
       "chain": "pharos",
       "status": "ok",
-      "through": "2026-11-20T13:44:26.000Z"
+      "through": "2026-11-21T13:11:52.000Z"
     },
     {
       "chain": "xdc",
       "status": "ok",
-      "through": "2026-11-20T13:50:42.000Z"
+      "through": "2026-11-21T13:15:30.000Z"
     },
     {
       "chain": "xlayer",
       "status": "ok",
-      "through": "2026-11-20T13:44:21.000Z"
+      "through": "2026-11-21T13:12:13.000Z"
     },
     {
       "chain": "stellar",
       "status": "ok",
-      "through": "2026-11-20T13:59:58.648Z"
+      "through": "2026-11-21T13:27:40.201Z"
     }
   ],
   "gaps": []
