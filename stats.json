@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-21T13:37:11.500Z",
+  "generatedAt": "2026-11-22T13:23:30.193Z",
   "since": "2026-11-16",
   "tag": "stablehops",
   "totals": {
@@ -22,12 +22,12 @@
     {
       "chain": "base",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "ethereum",
       "status": "ok",
-      "through": "2026-11-21T13:11:47.000Z"
+      "through": "2026-11-22T13:04:23.000Z"
     },
     {
       "chain": "solana",
@@ -37,118 +37,120 @@
     },
     {
       "chain": "arbitrum",
-      "status": "behind",
-      "through": "2026-11-20T16:52:39.000Z"
+      "status": "error",
+      "through": "2026-11-20T21:50:15.000Z",
+      "note": "HTTP 429 from arb1.arbitrum.io"
     },
     {
       "chain": "avalanche",
       "status": "ok",
-      "through": "2026-11-21T13:11:49.000Z"
+      "through": "2026-11-22T13:03:51.000Z"
     },
     {
       "chain": "op",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:35.000Z"
     },
     {
       "chain": "polygon",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "unichain",
       "status": "ok",
-      "through": "2026-11-21T13:12:10.000Z"
+      "through": "2026-11-22T13:04:36.000Z"
     },
     {
       "chain": "linea",
       "status": "ok",
-      "through": "2026-11-21T13:12:39.000Z"
+      "through": "2026-11-22T13:06:04.000Z"
     },
     {
       "chain": "worldchain",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:35.000Z"
     },
     {
       "chain": "ink",
       "status": "ok",
-      "through": "2026-11-21T13:12:10.000Z"
+      "through": "2026-11-22T13:04:36.000Z"
     },
     {
       "chain": "sonic",
       "status": "ok",
-      "through": "2026-11-21T13:09:48.000Z"
+      "through": "2026-11-22T13:04:06.000Z"
     },
     {
       "chain": "monad",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:33.000Z"
     },
     {
       "chain": "sei",
-      "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "status": "error",
+      "through": null,
+      "note": "requested height 244565039 has been pruned; earliest available is 244699999"
     },
     {
       "chain": "hyperevm",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:36.000Z"
     },
     {
       "chain": "injective",
       "status": "ok",
-      "through": "2026-11-21T13:12:12.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "cronos",
       "status": "ok",
-      "through": "2026-11-21T13:12:12.000Z"
+      "through": "2026-11-22T13:04:34.000Z"
     },
     {
       "chain": "plasma",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "plume",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "codex",
       "status": "ok",
-      "through": "2026-11-21T13:12:11.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "morph",
       "status": "ok",
-      "through": "2026-11-21T13:11:59.000Z"
+      "through": "2026-11-22T13:03:36.000Z"
     },
     {
       "chain": "edge",
       "status": "ok",
-      "through": "2026-11-21T12:01:39.000Z"
+      "through": "2026-11-22T12:06:12.000Z"
     },
     {
       "chain": "pharos",
       "status": "ok",
-      "through": "2026-11-21T13:11:52.000Z"
+      "through": "2026-11-22T13:05:03.000Z"
     },
     {
       "chain": "xdc",
       "status": "ok",
-      "through": "2026-11-21T13:15:30.000Z"
+      "through": "2026-11-22T13:00:57.000Z"
     },
     {
       "chain": "xlayer",
       "status": "ok",
-      "through": "2026-11-21T13:12:13.000Z"
+      "through": "2026-11-22T13:04:37.000Z"
     },
     {
       "chain": "stellar",
       "status": "ok",
-      "through": "2026-11-21T13:27:40.201Z"
+      "through": "2026-11-22T13:19:57.808Z"
     }
   ],
   "gaps": []
