@@ -1,39 +1,39 @@
 {
   "evm": {
-    "linea": "32681286",
-    "plume": "107453285",
-    "edge": "868777",
-    "morph": "30239571",
-    "plasma": "38407628",
-    "hyperevm": "51947255",
-    "sonic": "82963718",
-    "unichain": "64604317",
-    "xdc": "109630766",
+    "linea": "32691091",
+    "plume": "107695259",
+    "edge": "870698",
+    "morph": "30299416",
+    "plasma": "38503461",
+    "hyperevm": "52044688",
+    "sonic": "83022581",
+    "unichain": "64700152",
+    "xdc": "109666275",
     "sei": "244565039",
-    "op": "159876949",
-    "ink": "61854265",
-    "injective": "192845839",
-    "avalanche": "101071494",
-    "polygon": "97764805",
-    "cronos": "107385759",
-    "worldchain": "38008518",
-    "ethereum": "26470835",
-    "monad": "124441640",
-    "base": "60811507",
-    "pharos": "23746308",
-    "arbitrum": "526054549",
-    "xlayer": "76583641",
-    "codex": "33227305"
+    "op": "159924867",
+    "ink": "61950100",
+    "injective": "193005866",
+    "avalanche": "101177900",
+    "polygon": "97828695",
+    "cronos": "107606247",
+    "worldchain": "38056436",
+    "ethereum": "26478796",
+    "monad": "124757012",
+    "base": "61290683",
+    "pharos": "23846461",
+    "arbitrum": "526303849",
+    "xlayer": "76679476",
+    "codex": "33264121"
   },
   "solana": {
     "signature": null
   },
-  "stellar": 65613508,
+  "stellar": 65632677,
   "coverage": {
     "linea": {
       "chain": "linea",
       "status": "ok",
-      "through": "2026-11-22T13:06:04.000Z"
+      "through": "2026-11-23T15:42:51.000Z"
     },
     "solana": {
       "chain": "solana",
@@ -44,42 +44,42 @@
     "plume": {
       "chain": "plume",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "edge": {
       "chain": "edge",
       "status": "ok",
-      "through": "2026-11-22T12:06:12.000Z"
+      "through": "2026-11-23T15:18:12.000Z"
     },
     "morph": {
       "chain": "morph",
       "status": "ok",
-      "through": "2026-11-22T13:03:36.000Z"
+      "through": "2026-11-23T15:42:18.000Z"
     },
     "plasma": {
       "chain": "plasma",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "hyperevm": {
       "chain": "hyperevm",
       "status": "ok",
-      "through": "2026-11-22T13:04:36.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "sonic": {
       "chain": "sonic",
       "status": "ok",
-      "through": "2026-11-22T13:04:06.000Z"
+      "through": "2026-11-23T15:44:33.000Z"
     },
     "unichain": {
       "chain": "unichain",
       "status": "ok",
-      "through": "2026-11-22T13:04:36.000Z"
+      "through": "2026-11-23T15:41:51.000Z"
     },
     "xdc": {
       "chain": "xdc",
       "status": "ok",
-      "through": "2026-11-22T13:00:57.000Z"
+      "through": "2026-11-23T15:47:07.000Z"
     },
     "sei": {
       "chain": "sei",
@@ -90,78 +90,77 @@
     "op": {
       "chain": "op",
       "status": "ok",
-      "through": "2026-11-22T13:04:35.000Z"
+      "through": "2026-11-23T15:41:51.000Z"
     },
     "ink": {
       "chain": "ink",
       "status": "ok",
-      "through": "2026-11-22T13:04:36.000Z"
+      "through": "2026-11-23T15:41:51.000Z"
     },
     "injective": {
       "chain": "injective",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:49.000Z"
     },
     "avalanche": {
       "chain": "avalanche",
       "status": "ok",
-      "through": "2026-11-22T13:03:51.000Z"
+      "through": "2026-11-23T15:42:15.000Z"
     },
     "polygon": {
       "chain": "polygon",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "cronos": {
       "chain": "cronos",
       "status": "ok",
-      "through": "2026-11-22T13:04:34.000Z"
+      "through": "2026-11-23T15:41:50.000Z"
     },
     "worldchain": {
       "chain": "worldchain",
       "status": "ok",
-      "through": "2026-11-22T13:04:35.000Z"
+      "through": "2026-11-23T15:41:51.000Z"
     },
     "stellar": {
       "chain": "stellar",
       "status": "ok",
-      "through": "2026-11-22T13:19:57.808Z"
+      "through": "2026-11-23T15:57:35.863Z"
     },
     "ethereum": {
       "chain": "ethereum",
       "status": "ok",
-      "through": "2026-11-22T13:04:23.000Z"
+      "through": "2026-11-23T15:41:47.000Z"
     },
     "monad": {
       "chain": "monad",
       "status": "ok",
-      "through": "2026-11-22T13:04:33.000Z"
+      "through": "2026-11-23T15:41:50.000Z"
     },
     "base": {
       "chain": "base",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "pharos": {
       "chain": "pharos",
       "status": "ok",
-      "through": "2026-11-22T13:05:03.000Z"
+      "through": "2026-11-23T15:41:58.000Z"
     },
     "arbitrum": {
       "chain": "arbitrum",
-      "status": "error",
-      "through": "2026-11-20T21:50:15.000Z",
-      "note": "HTTP 429 from arb1.arbitrum.io"
+      "status": "behind",
+      "through": "2026-11-21T17:55:50.000Z"
     },
     "xlayer": {
       "chain": "xlayer",
       "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "through": "2026-11-23T15:41:52.000Z"
     },
     "codex": {
       "chain": "codex",
-      "status": "ok",
-      "through": "2026-11-22T13:04:37.000Z"
+      "status": "behind",
+      "through": "2026-11-23T09:31:49.000Z"
     }
   },
   "gaps": []
