@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-11-25T15:38:54.266Z",
+  "generatedAt": "2026-11-26T15:20:37.903Z",
   "since": "2026-11-16",
   "tag": "stablehops",
   "totals": {
@@ -22,17 +22,17 @@
     {
       "chain": "base",
       "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "through": "2026-11-26T14:55:37.000Z"
     },
     {
       "chain": "ethereum",
       "status": "ok",
-      "through": "2026-11-25T15:19:59.000Z"
+      "through": "2026-11-26T14:55:35.000Z"
     },
     {
       "chain": "solana",
       "status": "ok",
-      "through": "2026-11-25T15:35:06.628Z"
+      "through": "2026-11-26T15:10:40.936Z"
     },
     {
       "chain": "arbitrum",
@@ -43,112 +43,114 @@
     {
       "chain": "avalanche",
       "status": "ok",
-      "through": "2026-11-25T15:20:09.000Z"
+      "through": "2026-11-26T14:55:41.000Z"
     },
     {
       "chain": "op",
       "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "through": "2026-11-26T14:55:37.000Z"
     },
     {
       "chain": "polygon",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "unichain",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "linea",
       "status": "ok",
-      "through": "2026-11-25T15:22:20.000Z"
+      "through": "2026-11-26T15:02:59.000Z"
     },
     {
       "chain": "worldchain",
-      "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "status": "error",
+      "through": null,
+      "note": "HTTP 429 from worldchain-mainnet.g.alchemy.com"
     },
     {
       "chain": "ink",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "sonic",
       "status": "ok",
-      "through": "2026-11-25T15:17:35.000Z"
+      "through": "2026-11-26T14:59:56.000Z"
     },
     {
       "chain": "monad",
       "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "sei",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:37.000Z"
     },
     {
       "chain": "hyperevm",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "injective",
       "status": "ok",
-      "through": "2026-11-25T15:20:02.000Z"
+      "through": "2026-11-26T14:55:35.000Z"
     },
     {
       "chain": "cronos",
       "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "through": "2026-11-26T14:55:37.000Z"
     },
     {
       "chain": "plasma",
       "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "through": "2026-11-26T14:55:37.000Z"
     },
     {
       "chain": "plume",
       "status": "ok",
-      "through": "2026-11-25T15:20:00.000Z"
+      "through": "2026-11-26T14:55:36.000Z"
     },
     {
       "chain": "codex",
-      "status": "ok",
-      "through": "2026-11-25T15:20:03.000Z"
+      "status": "error",
+      "through": null,
+      "note": "HTTP 429 from rpc.codex.xyz"
     },
     {
       "chain": "morph",
       "status": "ok",
-      "through": "2026-11-25T15:17:35.000Z"
+      "through": "2026-11-26T14:59:16.000Z"
     },
     {
       "chain": "edge",
       "status": "ok",
-      "through": "2026-11-25T14:00:59.000Z"
+      "through": "2026-11-26T14:00:18.000Z"
     },
     {
       "chain": "pharos",
       "status": "ok",
-      "through": "2026-11-25T15:20:04.000Z"
+      "through": "2026-11-26T14:55:35.000Z"
     },
     {
       "chain": "xdc",
       "status": "ok",
-      "through": "2026-11-25T15:22:45.000Z"
+      "through": "2026-11-26T14:58:32.000Z"
     },
     {
       "chain": "xlayer",
       "status": "ok",
-      "through": "2026-11-25T15:20:04.000Z"
+      "through": "2026-11-26T14:55:38.000Z"
     },
     {
       "chain": "stellar",
       "status": "ok",
-      "through": "2026-11-25T15:35:47.640Z"
+      "through": "2026-11-26T15:11:20.099Z"
     }
   ],
   "gaps": []
